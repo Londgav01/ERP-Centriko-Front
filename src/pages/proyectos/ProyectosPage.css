@@ -1,0 +1,38 @@
+.table-empty-icon {
+  display: block;
+  margin: 0 auto 8px;
+  color: var(--color-text-muted);
+}
+
+.projects-table-id {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.projects-table-name {
+  font-weight: 500;
+}
+
+.projects-table-muted {
+  color: var(--color-text-secondary);
+}
+
+.projects-table-budget {
+  font-weight: 600;
+}
+
+.modal-close-button {
+  padding: 0 6px;
+}
+
+.alert-icon {
+  flex-shrink: 0;
+}
+
+.form-section-gap {
+  margin-bottom: 16px;
+}
+
+.form-section-no-gap {
+  margin-bottom: 0;
+}

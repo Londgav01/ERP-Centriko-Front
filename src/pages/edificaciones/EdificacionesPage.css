@@ -1,0 +1,26 @@
+.filter-row {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.filter-select { width: 280px; }
+
+.table-empty-icon {
+  display: block;
+  margin: 0 auto 8px;
+  color: var(--color-text-muted);
+}
+
+.td-id { color: var(--color-primary); font-weight: 600; }
+.td-project { color: var(--color-text-secondary); font-size: 12px; }
+.td-project-name { display: block; color: var(--color-text-muted); }
+.td-name { font-weight: 500; }
+.td-desc { color: var(--color-text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-muted { color: var(--color-text-secondary); }
+
+.modal-close-button { padding: 0 6px; }
+.alert-icon { flex-shrink: 0; }
+
+.form-section-gap { margin-bottom: 16px; }
+.form-section-top-gap { margin-top: 16px; }

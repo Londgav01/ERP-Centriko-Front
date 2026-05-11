@@ -1,0 +1,207 @@
+/* ── Filtros ──────────────────────────────────── */
+.rs-filter-select--estado   { width: 160px; }
+.rs-filter-select--proyecto { width: 240px; }
+
+/* ── Tabla principal ──────────────────────────── */
+.rs-muted-icon     { color: var(--color-text-muted); }
+.rs-block-muted    { display: block; }
+.rs-success-action { color: var(--color-success); }
+
+/* ── Modal — sobreescribe width Y max-width del base ── */
+.rs-modal-wide {
+  width: 1080px !important;
+  max-width: 92vw !important;
+  overflow-x: hidden;
+}
+
+.rs-icon-close { padding: 0 6px; }
+
+/* ── Formulario ───────────────────────────────── */
+.rs-grid-gap { margin-bottom: 16px; }
+
+.rs-items-header {
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.rs-items-label { margin: 0; }
+.rs-no-shrink   { flex-shrink: 0; }
+
+/* ── Tabla de ítems ───────────────────────────── */
+.rs-items-table-wrapper {
+  overflow: visible;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+}
+
+.rs-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Cabeceras tabla ítems */
+.rs-items-table th {
+  padding: 11px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+/* Celdas tabla ítems */
+.rs-items-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f8fafc;
+  vertical-align: middle;
+}
+.rs-items-table tbody tr:last-child td { border-bottom: none; }
+.rs-items-table tbody tr:hover { background: #f8fafc; }
+
+/* Anchos de columnas */
+.rs-th-material  { width: 38%; }
+.rs-th-unidad    { width: 100px; text-align: center; }
+.rs-th-cantidad  { width: 160px; }
+.rs-th-notas     { width: auto; }
+.rs-th-actions   { width: 56px; text-align: center; }
+
+.rs-td-unidad    { text-align: center; }
+.rs-trash-button { padding: 0 8px; }
+
+/* ── Autocomplete ─────────────────────────────── */
+.rs-autocomplete-cell { position: relative; }
+
+.rs-autocomplete-search {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.rs-autocomplete-search svg {
+  position: absolute;
+  left: 10px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.rs-autocomplete-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px 0 32px !important;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.rs-autocomplete-input:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+}
+
+.rs-autocomplete-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.rs-autocomplete-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: background var(--transition);
+}
+.rs-autocomplete-option:last-child { border-bottom: none; }
+.rs-autocomplete-option:hover      { background: var(--color-primary-light); }
+
+.rs-autocomplete-code {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--color-primary);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.rs-autocomplete-name   { flex: 1; color: var(--color-text-primary); }
+.rs-autocomplete-unidad {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+/* ── Input notas en tabla ─────────────────────── */
+.rs-notes-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition);
+}
+.rs-notes-input:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+}
+
+/* ── Modal detalle ────────────────────────────── */
+.rs-table-gap      { margin-bottom: 16px; }
+.rs-system-box-gap { margin-bottom: 16px; }
+
+.rs-det-cantidad-right {
+  text-align: right;
+  font-weight: 600;
+}
+.rs-det-cantidad-aprobada {
+  display: block;
+  text-align: right;
+  font-weight: 600;
+  color: var(--color-success);
+}
+.rs-det-cantidad-pendiente {
+  display: block;
+  text-align: right;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}

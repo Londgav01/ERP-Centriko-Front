@@ -2,21 +2,46 @@ import { useEffect, useState } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
-import { Plus, Pencil, Trash2, Building2, Loader2, AlertCircle, X } from 'lucide-react'
+import { Plus, Pencil, Building2, Loader2, AlertCircle, X } from 'lucide-react'
+import './ProyectosPage.css'
 
 interface Proyecto {
-  id: number; codigo: string; nombre: string; ubicacion: string
-  presupuesto: number; fecha_inicio: string; fecha_fin: string; estado: string
+  proyecto_id: string
+  nombre: string
+  ciudad: string
+  direccion: string
+  presupuesto_total: number
+  fecha_inicio: string
+  fecha_fin_esperada: string
+  estado: string
+  responsable: string
+  notas: string
 }
-const EMPTY = { codigo: '', nombre: '', ubicacion: '', presupuesto: 0, fecha_inicio: '', fecha_fin: '', estado: 'ACTIVO' }
-const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
-const BADGE: Record<string, string> = { ACTIVO: 'badge-success', PAUSADO: 'badge-warning', TERMINADO: 'badge-neutral' }
+
+const EMPTY = {
+  nombre: '', ciudad: '', direccion: '',
+  presupuesto_total: 0, fecha_inicio: '', fecha_fin_esperada: '',
+  estado: 'ACTIVO', responsable: '', notas: ''
+}
+
+const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', {
+  style: 'currency', currency: 'COP', maximumFractionDigits: 0
+}).format(v)
+
+const fmtMiles = (v: number) => new Intl.NumberFormat('es-CO', {
+  maximumFractionDigits: 0
+}).format(v)
+
+const BADGE: Record<string, string> = {
+  ACTIVO: 'badge-success', TERMINADO: 'badge-neutral', SUSPENDIDO: 'badge-warning'
+}
 
 export default function ProyectosPage() {
   const { toast } = useToast()
   const [proyectos, setProyectos] = useState<Proyecto[]>([])
   const [form, setForm] = useState(EMPTY)
-  const [editId, setEditId] = useState<number | null>(null)
+  const [presupuestoView, setPresupuestoView] = useState('')
+  const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
@@ -31,18 +56,46 @@ export default function ProyectosPage() {
 
   useEffect(() => { cargar() }, [])
 
-  const abrirNuevo = () => { setForm(EMPTY); setEditId(null); setError(''); setShowForm(true) }
+  const abrirNuevo = () => {
+    setForm(EMPTY); setPresupuestoView(''); setEditId(null); setError(''); setShowForm(true)
+  }
+
   const abrirEditar = (p: Proyecto) => {
-    setForm({ codigo: p.codigo, nombre: p.nombre, ubicacion: p.ubicacion || '',
-      presupuesto: p.presupuesto, fecha_inicio: p.fecha_inicio || '', fecha_fin: p.fecha_fin || '', estado: p.estado })
-    setEditId(p.id); setError(''); setShowForm(true)
+    setForm({
+      nombre: p.nombre, ciudad: p.ciudad || '', direccion: p.direccion || '',
+      presupuesto_total: p.presupuesto_total, fecha_inicio: p.fecha_inicio || '',
+      fecha_fin_esperada: p.fecha_fin_esperada || '', estado: p.estado,
+      responsable: p.responsable || '', notas: p.notas || ''
+    })
+    setPresupuestoView(p.presupuesto_total ? fmtMiles(p.presupuesto_total) : '')
+    setEditId(p.proyecto_id); setError(''); setShowForm(true)
+  }
+
+  const set = (key: string, value: any) => setForm(s => ({ ...s, [key]: value }))
+
+  const onPresupuestoChange = (value: string) => {
+    const soloDigitos = value.replace(/\D/g, '')
+    if (!soloDigitos) {
+      setPresupuestoView('')
+      set('presupuesto_total', 0)
+      return
+    }
+
+    const numero = Number(soloDigitos)
+    set('presupuesto_total', numero)
+    setPresupuestoView(fmtMiles(numero))
   }
 
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault(); setCargando(true); setError('')
     try {
-      if (editId) { await api.put(`/api/proyectos/${editId}`, form); toast.success('Proyecto actualizado') }
-      else        { await api.post('/api/proyectos', form);          toast.success('Proyecto creado correctamente') }
+      if (editId) {
+        await api.put(`/api/proyectos/${editId}`, form)
+        toast.success('Proyecto actualizado correctamente')
+      } else {
+        await api.post('/api/proyectos', form)
+        toast.success('Proyecto creado correctamente')
+      }
       setShowForm(false); cargar()
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Error al guardar'
@@ -50,57 +103,65 @@ export default function ProyectosPage() {
     } finally { setCargando(false) }
   }
 
-  const eliminar = async (id: number, nombre: string) => {
-    if (!confirm(`¿Eliminar el proyecto "${nombre}"? Esta acción no se puede deshacer.`)) return
-    try { await api.delete(`/api/proyectos/${id}`); toast.success('Proyecto eliminado'); cargar() }
-    catch { toast.error('No se pudo eliminar el proyecto') }
-  }
-
   return (
     <MainLayout>
+      {/* Header */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Proyectos</h1>
-          <p className="page-subtitle">{proyectos.length} proyecto{proyectos.length !== 1 ? 's' : ''} registrado{proyectos.length !== 1 ? 's' : ''}</p>
+          <p className="page-subtitle">
+            {proyectos.length} proyecto{proyectos.length !== 1 ? 's' : ''} registrado{proyectos.length !== 1 ? 's' : ''}
+          </p>
         </div>
         <button className="btn btn-primary" onClick={abrirNuevo}>
           <Plus size={15} /> Nuevo proyecto
         </button>
       </div>
 
+      {/* Tabla */}
       {cargandoPagina ? (
-        <div className="page-loading"><Loader2 size={20} className="spinner" /><span>Cargando proyectos...</span></div>
+        <div className="page-loading">
+          <Loader2 size={20} className="spinner" />
+          <span>Cargando proyectos...</span>
+        </div>
       ) : (
         <div className="data-table-wrapper">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Código</th><th>Nombre</th><th>Ubicación</th>
-                <th>Presupuesto</th><th>Estado</th><th>Acciones</th>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Ciudad</th>
+                <th>Responsable</th>
+                <th>Presupuesto</th>
+                <th>Fecha inicio</th>
+                <th>Estado</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {proyectos.length === 0 ? (
-                <tr><td colSpan={6}>
+                <tr><td colSpan={8}>
                   <div className="table-empty">
-                    <Building2 size={32} style={{ margin: '0 auto 8px', color: 'var(--color-text-muted)', display: 'block' }} />
-                    No hay proyectos registrados
+                    <Building2 size={32} className="table-empty-icon" />
+                    No hay proyectos registrados. Crea el primero.
                   </div>
                 </td></tr>
               ) : proyectos.map(p => (
-                <tr key={p.id}>
-                  <td><span className="font-mono" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{p.codigo}</span></td>
-                  <td style={{ fontWeight: 500 }}>{p.nombre}</td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{p.ubicacion || '—'}</td>
-                  <td style={{ fontWeight: 600 }}>{fmtCOP(p.presupuesto)}</td>
+                <tr key={p.proyecto_id}>
+                  <td><span className="font-mono projects-table-id">{p.proyecto_id}</span></td>
+                  <td className="projects-table-name">{p.nombre}</td>
+                  <td className="projects-table-muted">{p.ciudad || '—'}</td>
+                  <td className="projects-table-muted">{p.responsable || '—'}</td>
+                  <td className="projects-table-budget">{fmtCOP(p.presupuesto_total)}</td>
+                  <td className="projects-table-muted">
+                    {p.fecha_inicio ? new Date(p.fecha_inicio + 'T00:00:00').toLocaleDateString('es-CO') : '—'}
+                  </td>
                   <td><span className={`badge ${BADGE[p.estado] || 'badge-neutral'}`}>{p.estado}</span></td>
                   <td>
                     <div className="table-actions">
                       <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(p)}>
                         <Pencil size={13} /> Editar
-                      </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => eliminar(p.id, p.nombre)} title="Eliminar proyecto">
-                        <Trash2 size={13} />
                       </button>
                     </div>
                   </td>
@@ -114,72 +175,128 @@ export default function ProyectosPage() {
       {/* Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal">
+          <div className="modal modal-lg">
             <div className="modal-header">
-              <span className="modal-title">{editId ? 'Editar proyecto' : 'Nuevo proyecto'}</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)} style={{ padding: '0 6px' }} title="Cerrar">
+              <span className="modal-title">
+                {editId ? `Editar — ${editId}` : 'Nuevo proyecto'}
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm modal-close-button"
+                onClick={() => setShowForm(false)}
+                aria-label="Cerrar formulario de proyecto"
+                title="Cerrar formulario de proyecto"
+              >
                 <X size={16} />
               </button>
             </div>
+
             <form onSubmit={guardar}>
               <div className="modal-body">
                 {error && (
                   <div className="alert alert-error">
-                    <AlertCircle size={15} style={{ flexShrink: 0 }} /><span>{error}</span>
+                    <AlertCircle size={15} className="alert-icon" />
+                    <span>{error}</span>
                   </div>
                 )}
-                <div className="form-grid-3" style={{ marginBottom: 16 }}>
+
+                {/* Fila 1: Nombre (full) */}
+                <div className="form-section-gap">
                   <div className="form-group">
-                    <label className="form-label required" htmlFor="codigo">Código</label>
-                    <input id="codigo" className="form-input font-mono" value={form.codigo}
-                      onChange={e => setForm(s => ({ ...s, codigo: e.target.value.toUpperCase() }))} required placeholder="PRY-001" title="Código del proyecto" />
-                  </div>
-                  <div className="form-group col-span-2">
-                    <label className="form-label required" htmlFor="nombre">Nombre del proyecto</label>
-                    <input id="nombre" className="form-input" value={form.nombre}
-                      onChange={e => setForm(s => ({ ...s, nombre: e.target.value }))} required placeholder="Ej: Torre Residencial El Parque" title="Nombre del proyecto" />
+                    <label className="form-label required" htmlFor="proyecto-nombre">Nombre del proyecto</label>
+                    <input className="form-input" value={form.nombre}
+                      id="proyecto-nombre"
+                      onChange={e => set('nombre', e.target.value)}
+                      required placeholder="Ej: Torre Residencial El Parque" />
                   </div>
                 </div>
-                <div className="form-grid-3" style={{ marginBottom: 16 }}>
+
+                {/* Fila 2: Ciudad + Responsable */}
+                <div className="form-grid-2 form-section-gap">
                   <div className="form-group">
-                    <label className="form-label required" htmlFor="presupuesto">Presupuesto (COP)</label>
-                    <input id="presupuesto" type="number" className="form-input" value={form.presupuesto || ''}
-                      onChange={e => setForm(s => ({ ...s, presupuesto: Number(e.target.value) }))} required min={0} placeholder="0" title="Presupuesto en pesos colombianos" />
+                    <label className="form-label" htmlFor="proyecto-ciudad">Ciudad</label>
+                    <input className="form-input" value={form.ciudad}
+                      id="proyecto-ciudad"
+                      onChange={e => set('ciudad', e.target.value)}
+                      placeholder="Ej: Medellín" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="fecha_inicio">Fecha inicio</label>
-                    <input id="fecha_inicio" type="date" className="form-input" value={form.fecha_inicio}
-                      onChange={e => setForm(s => ({ ...s, fecha_inicio: e.target.value }))} title="Fecha de inicio del proyecto" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="fecha_fin">Fecha fin estimada</label>
-                    <input id="fecha_fin" type="date" className="form-input" value={form.fecha_fin}
-                      onChange={e => setForm(s => ({ ...s, fecha_fin: e.target.value }))} title="Fecha fin estimada del proyecto" />
+                    <label className="form-label" htmlFor="proyecto-responsable">Responsable</label>
+                    <input className="form-input" value={form.responsable}
+                      id="proyecto-responsable"
+                      onChange={e => set('responsable', e.target.value)}
+                      placeholder="Nombre del director de obra" />
                   </div>
                 </div>
-                <div className="form-grid-2">
+
+                {/* Fila 3: Dirección (full) */}
+                <div className="form-section-gap">
                   <div className="form-group">
-                    <label className="form-label" htmlFor="ubicacion">Ubicación</label>
-                    <input id="ubicacion" className="form-input" value={form.ubicacion}
-                      onChange={e => setForm(s => ({ ...s, ubicacion: e.target.value }))} placeholder="Ciudad, Dirección" title="Ubicación del proyecto" />
+                    <label className="form-label" htmlFor="proyecto-direccion">Dirección</label>
+                    <input className="form-input" value={form.direccion}
+                      id="proyecto-direccion"
+                      onChange={e => set('direccion', e.target.value)}
+                      placeholder="Ej: Cra 45 #80-23" />
                   </div>
-                  {editId && (
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="estado">Estado</label>
-                      <select id="estado" className="form-select" value={form.estado}
-                        onChange={e => setForm(s => ({ ...s, estado: e.target.value }))} title="Estado actual del proyecto">
-                        <option value="ACTIVO">ACTIVO</option>
-                        <option value="PAUSADO">PAUSADO</option>
-                        <option value="TERMINADO">TERMINADO</option>
-                      </select>
-                    </div>
-                  )}
+                </div>
+
+                {/* Fila 4: Presupuesto + Fechas */}
+                <div className="form-grid-3 form-section-gap">
+                  <div className="form-group">
+                    <label className="form-label required" htmlFor="proyecto-presupuesto">Presupuesto total (COP)</label>
+                    <input type="text" className="form-input" value={presupuestoView}
+                      id="proyecto-presupuesto"
+                      inputMode="numeric"
+                      onChange={e => onPresupuestoChange(e.target.value)}
+                      required min={0} placeholder="0" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="proyecto-fecha-inicio">Fecha inicio</label>
+                    <input type="date" className="form-input" value={form.fecha_inicio}
+                      id="proyecto-fecha-inicio"
+                      onChange={e => set('fecha_inicio', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="proyecto-fecha-fin">Fecha fin esperada</label>
+                    <input type="date" className="form-input" value={form.fecha_fin_esperada}
+                      id="proyecto-fecha-fin"
+                      onChange={e => set('fecha_fin_esperada', e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Fila 5: Estado (solo edición) + Notas */}
+                {/* Fila 5: Estado + Notas */}
+                <div className="form-grid-2 form-section-no-gap">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="proyecto-estado">Estado</label>
+                    <select className="form-select" value={form.estado}
+                      id="proyecto-estado"
+                      title="Estado del proyecto"
+                      onChange={e => set('estado', e.target.value)}>
+                      <option value="ACTIVO">ACTIVO</option>
+                      <option value="SUSPENDIDO">SUSPENDIDO</option>
+                      <option value="TERMINADO">TERMINADO</option>
+                    </select>
+                  </div>
+                  <div className={`form-group ${editId ? '' : ''}`}>
+                    <label className="form-label" htmlFor="proyecto-notas">Notas</label>
+                    <textarea className="form-textarea" value={form.notas}
+                      id="proyecto-notas"
+                      onChange={e => set('notas', e.target.value)}
+                      placeholder="Observaciones generales del proyecto" rows={2} />
+                  </div>
                 </div>
               </div>
+
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  Cancelar
+                </button>
                 <button type="submit" className="btn btn-primary" disabled={cargando}>
-                  {cargando ? <><Loader2 size={14} className="spinner" /> Guardando...</> : editId ? 'Guardar cambios' : 'Crear proyecto'}
+                  {cargando
+                    ? <><Loader2 size={14} className="spinner" /> Guardando...</>
+                    : editId ? 'Guardar cambios' : 'Crear proyecto'
+                  }
                 </button>
               </div>
             </form>

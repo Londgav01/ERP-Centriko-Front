@@ -3,6 +3,16 @@ import { useAuth } from './context/AuthContext'
 import LoginPage from './pages/auth/LoginPage'
 import DashboardPage from './pages/dashboard/DashboardPage'
 import ProyectosPage from './pages/proyectos/ProyectosPage'
+import EdificacionesPage from './pages/edificaciones/EdificacionesPage'
+import CapitulosPage from './pages/capitulos/CapitulosPage'
+import MaterialesPage from './pages/materiales/MaterialesPage'
+import ProveedoresPage from './pages/proveedores/ProveedoresPage'
+import ContratistasPage from './pages/contratistas/ContratistasPage'
+import UsuariosPage from './pages/usuarios/UsuariosPage'
+import RSPage from './pages/rs/RSPage'
+import CZPage from './pages/cz/CZPage'
+import OCPage from './pages/oc/OCPage'
+
 
 
 function RutaProtegida({ children }: { children: React.ReactNode }) {
@@ -19,6 +29,15 @@ export default function App() {
       <Route path="/login" element={usuario ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/" element={<RutaProtegida><DashboardPage /></RutaProtegida>} />
       <Route path="/proyectos" element={<RutaProtegida><ProyectosPage /></RutaProtegida>} />
+      <Route path="/edificaciones" element={<RutaProtegida><EdificacionesPage /></RutaProtegida>} />
+      <Route path="/capitulos" element={<RutaProtegida><CapitulosPage /></RutaProtegida>} />
+      <Route path="/materiales" element={<RutaProtegida><MaterialesPage /></RutaProtegida>} />
+      <Route path="/proveedores" element={<RutaProtegida><ProveedoresPage /></RutaProtegida>} />
+      <Route path="/contratistas" element={<RutaProtegida><ContratistasPage /></RutaProtegida>} />
+      <Route path="/usuarios" element={<RutaProtegida><UsuariosPage /></RutaProtegida>} />
+      <Route path="/requisiciones" element={<RutaProtegida><RSPage /></RutaProtegida>} />
+      <Route path="/cotizaciones" element={<RutaProtegida><CZPage /></RutaProtegida>} />
+      <Route path="/ordenes-compra" element={<RutaProtegida><OCPage /></RutaProtegida>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
