@@ -8,6 +8,8 @@ import {
   X, Eye, Star, Trash2, Check
 } from 'lucide-react'
 import NumericInput from '../../components/ui/NumericInput'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 interface RSDisponible {
   rs_id: string; nombre_proyecto: string
@@ -54,25 +56,35 @@ export default function CZPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
 
-  const [lista,           setLista]           = useState<CZ[]>([])
-  const [rsDisponibles,   setRsDisponibles]   = useState<RSDisponible[]>([])
-  const [proveedores,     setProveedores]      = useState<Proveedor[]>([])
-  const [filtroEstado,    setFiltroEstado]     = useState('')
-  const [filtroRs,        setFiltroRs]         = useState('')
+  const [lista,          setLista]          = useState<CZ[]>([])
+  const pag = usePagination(lista)
+  const [todasLasRS,     setTodasLasRS]     = useState<{ rs_id: string; nombre_proyecto: string }[]>([])
+  const [rsDisponibles,  setRsDisponibles]  = useState<RSDisponible[]>([])
+  const [proveedores,    setProveedores]    = useState<Proveedor[]>([])
+  const [filtroEstado,   setFiltroEstado]   = useState('')
+  const [filtroRs,       setFiltroRs]       = useState('')
+  const [mostrarSeleccionadas, setMostrarSeleccionadas] = useState(false)
 
-  const [showForm,  setShowForm]  = useState(false)
-  const [form,      setForm]      = useState(EMPTY_FORM)
-  const [items,     setItems]     = useState<ItemCZ[]>([])
-  const [error,     setError]     = useState('')
-  const [cargando,  setCargando]  = useState(false)
+  const [showForm,      setShowForm]      = useState(false)
+  const [form,          setForm]          = useState(EMPTY_FORM)
+  const [items,         setItems]         = useState<ItemCZ[]>([])
+  const [error,         setError]         = useState('')
+  const [cargando,      setCargando]      = useState(false)
   const [cargandoItems, setCargandoItems] = useState(false)
 
   const [showDetalle,  setShowDetalle]  = useState(false)
   const [czDetalle,    setCzDetalle]    = useState<CZ | null>(null)
-  const [detalleItems, setDetalleItems] = useState<ItemCZ[]>([])
+  const [detalleItems, setDetalleItems] = useState<any[]>([])
   const [cargandoDet,  setCargandoDet]  = useState(false)
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
+
+  const extraerRsUnicas = (data: CZ[]) =>
+    Array.from(
+      new Map(
+        data.map(cz => [cz.rs_id, { rs_id: cz.rs_id, nombre_proyecto: cz.nombre_proyecto }])
+      ).values()
+    )
 
   useEffect(() => {
     Promise.all([
@@ -81,22 +93,26 @@ export default function CZPage() {
       api.get('/api/proveedores?activo=1'),
     ]).then(([rCZ, rRS, rProv]) => {
       setLista(rCZ.data.data)
+      setTodasLasRS(extraerRsUnicas(rCZ.data.data))
       setRsDisponibles(rRS.data.data)
       setProveedores(rProv.data.data)
+      pag.reset()
     }).finally(() => setCargandoPagina(false))
   }, [])
 
-  const cargarLista = async (estado = filtroEstado, rsId = filtroRs) => {
+  const cargarLista = async (estado = filtroEstado, rsId = filtroRs, mostrar = mostrarSeleccionadas) => {
     const params = new URLSearchParams()
     if (estado) params.append('estado', estado)
     if (rsId)   params.append('rs_id', rsId)
+    params.append('mostrar_seleccionadas', mostrar ? '1' : '0')
     const res = await api.get(`/api/cz?${params}`)
     setLista(res.data.data)
+    pag.reset()
+    if (!rsId && !estado) setTodasLasRS(extraerRsUnicas(res.data.data))
   }
 
   const set = (key: string, val: any) => setForm(s => ({ ...s, [key]: val }))
 
-  // Al seleccionar RS, carga sus ítems automáticamente
   const handleRs = async (rsId: string) => {
     set('rs_id', rsId)
     if (!rsId) { setItems([]); return }
@@ -104,7 +120,7 @@ export default function CZPage() {
     try {
       const res = await api.get(`/api/cz/items-rs/${rsId}`)
       setItems(res.data.data.map((item: any) => ({
-        material_id:    item.material_id,
+        material_id:     item.material_id,
         nombre_material: item.nombre_material,
         unidad:          item.unidad,
         cantidad:        item.cantidad,
@@ -120,9 +136,9 @@ export default function CZPage() {
   const actualizarItem = (idx: number, key: string, val: number) => {
     const nuevos = [...items]
     const item   = { ...nuevos[idx], [key]: val }
-    const precioNeto  = item.precio_unitario * (1 - (item.descuento_pct || 0) / 100)
-    item.precio_neto  = precioNeto
-    item.valor_total  = precioNeto * item.cantidad
+    const precioNeto = item.precio_unitario * (1 - (item.descuento_pct || 0) / 100)
+    item.precio_neto = precioNeto
+    item.valor_total = precioNeto * item.cantidad
     nuevos[idx] = item
     setItems(nuevos)
   }
@@ -142,7 +158,6 @@ export default function CZPage() {
       toast.success('Cotización registrada correctamente')
       setShowForm(false); setForm(EMPTY_FORM); setItems([])
       cargarLista()
-      // Recargar RS disponibles
       const rRS = await api.get('/api/cz/rs-disponibles/lista')
       setRsDisponibles(rRS.data.data)
     } catch (err: any) {
@@ -212,13 +227,32 @@ export default function CZPage() {
           <option value="SELECCIONADA">SELECCIONADA</option>
           <option value="DESCARTADA">DESCARTADA</option>
         </select>
+
+        {/* ← Siempre muestra todas las RS independientemente del filtro activo */}
         <select className="form-select" value={filtroRs}
           onChange={e => { setFiltroRs(e.target.value); cargarLista(filtroEstado, e.target.value) }}
-          aria-label="Filtrar por RS" style={{ width: 240 }}>
+          aria-label="Filtrar por RS" style={{ width: 280 }}>
           <option value="">Todas las RS</option>
-          {lista.filter((v, i, a) => a.findIndex(t => t.rs_id === v.rs_id) === i)
-            .map(cz => <option key={cz.rs_id} value={cz.rs_id}>{cz.rs_id} — {cz.nombre_proyecto}</option>)}
+          {todasLasRS.map(rs => (
+            <option key={rs.rs_id} value={rs.rs_id}>
+              {rs.rs_id} — {rs.nombre_proyecto}
+            </option>
+          ))}
         </select>
+
+        <div className="toggle-wrap">
+          <button
+            type="button"
+            className={`toggle ${mostrarSeleccionadas ? 'on' : 'off'}`}
+            onClick={() => {
+              const nuevo = !mostrarSeleccionadas
+              setMostrarSeleccionadas(nuevo)
+              cargarLista(filtroEstado, filtroRs, nuevo)
+            }}
+            aria-label="Mostrar cotizaciones ganadoras"
+          />
+          <span className="toggle-label">Mostrar ganadoras</span>
+        </div>
       </div>
 
       {/* Tabla */}
@@ -242,11 +276,15 @@ export default function CZPage() {
                     <span>No hay cotizaciones registradas</span>
                   </div>
                 </td></tr>
-              ) : lista.map(cz => (
-                <tr key={cz.cz_id}>
-                  <td className="td-id">
-                    {cz.cz_id}
-                    {!!cz.es_ganadora && <span className="badge badge-success" style={{ marginLeft: 6 }}>GANADORA</span>}
+              ) : (
+                <>
+                  {pag.itemsPagina.map(cz => (
+                    <tr key={cz.cz_id}>
+                  <td>
+                    <span className="td-id">{cz.cz_id}</span>
+                    {!!cz.es_ganadora && (
+                      <span className="badge badge-success" style={{ marginLeft: 6 }}>GANADORA</span>
+                    )}
                   </td>
                   <td className="td-id">{cz.rs_id}</td>
                   <td className="td-bold">{cz.nombre_proveedor}</td>
@@ -254,26 +292,36 @@ export default function CZPage() {
                     <span className="td-bold">{cz.nombre_proyecto}</span>
                     <span className="td-muted" style={{ display: 'block' }}>{cz.nombre_capitulo}</span>
                   </td>
-                  <td style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{fmtCOP(cz.valor_total)}</td>
-                  <td className="td-secondary">{cz.dias_entrega ? `${cz.dias_entrega} días` : '—'}</td>
-                  <td><span className={`badge ${BADGE_ESTADO[cz.estado] || 'badge-neutral'}`}>{cz.estado}</span></td>
+                  <td style={{ fontWeight: 700 }}>{fmtCOP(cz.valor_total)}</td>
+                  <td className="td-secondary">
+                    {cz.dias_entrega ? `${cz.dias_entrega} días` : '—'}
+                  </td>
+                  <td>
+                    <span className={`badge ${BADGE_ESTADO[cz.estado] || 'badge-neutral'}`}>
+                      {cz.estado}
+                    </span>
+                  </td>
                   <td>
                     <div className="table-actions">
                       <button className="btn btn-ghost btn-sm" onClick={() => verDetalle(cz.cz_id)}>
                         <Eye size={13} /> Ver
                       </button>
                       {puedeGestionar && cz.estado === 'RECIBIDA' && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => seleccionarGanadora(cz.cz_id)}
-                          style={{ color: 'var(--color-warning)' }}>
+                        <button className="btn btn-ghost btn-sm"
+                          style={{ color: 'var(--color-warning)' }}
+                          onClick={() => seleccionarGanadora(cz.cz_id)}>
                           <Star size={13} /> Ganadora
                         </button>
                       )}
                     </div>
                   </td>
-                </tr>
-              ))}
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
+          <Pagination {...pag} />
         </div>
       )}
 
@@ -335,7 +383,8 @@ export default function CZPage() {
                   <div className="form-group">
                     <label className="form-label" htmlFor="cz-condpago">Condiciones de pago</label>
                     <select id="cz-condpago" className="form-select" value={form.condiciones_pago}
-                      onChange={e => set('condiciones_pago', e.target.value)} aria-label="Condiciones de pago">
+                      onChange={e => set('condiciones_pago', e.target.value)}
+                      aria-label="Condiciones de pago">
                       <option value="">Sin especificar</option>
                       {FORMAS_PAGO.map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
@@ -380,7 +429,7 @@ export default function CZPage() {
                           <th style={{ width: 80, textAlign: 'center' }}>Unidad</th>
                           <th style={{ width: 100, textAlign: 'right' }}>Cantidad</th>
                           <th style={{ width: 160 }}>Precio unitario</th>
-                          <th style={{ width: 100 }}>Descuento %</th>
+                          <th style={{ width: 120 }}>Descuento %</th>
                           <th style={{ width: 160, textAlign: 'right' }}>Total ítem</th>
                         </tr>
                       </thead>
@@ -428,9 +477,14 @@ export default function CZPage() {
               </div>
 
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  Cancelar
+                </button>
                 <button type="submit" className="btn btn-primary" disabled={cargando}>
-                  {cargando ? <><Loader2 size={14} className="spinner" /> Guardando...</> : 'Registrar cotización'}
+                  {cargando
+                    ? <><Loader2 size={14} className="spinner" /> Guardando...</>
+                    : 'Registrar cotización'
+                  }
                 </button>
               </div>
             </form>
@@ -450,7 +504,9 @@ export default function CZPage() {
 
             <div className="modal-body">
               {cargandoDet ? (
-                <div className="page-loading"><Loader2 size={18} className="spinner" /><span>Cargando...</span></div>
+                <div className="page-loading">
+                  <Loader2 size={18} className="spinner" /><span>Cargando...</span>
+                </div>
               ) : czDetalle && (
                 <>
                   <div className="system-values-box" style={{ marginBottom: 16 }}>
@@ -490,12 +546,17 @@ export default function CZPage() {
                             <td style={{ textAlign: 'center' }}>
                               <span className="badge badge-neutral">{d.unidad}</span>
                             </td>
-                            <td style={{ textAlign: 'right' }}>{d.cantidad.toLocaleString('es-CO')}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              {d.cantidad.toLocaleString('es-CO')}
+                            </td>
                             <td style={{ textAlign: 'right' }}>{fmtCOP(d.precio_unitario)}</td>
-                            <td style={{ textAlign: 'right', color: d.descuento_pct > 0 ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+                            <td style={{ textAlign: 'right',
+                              color: d.descuento_pct > 0 ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
                               {d.descuento_pct > 0 ? `${d.descuento_pct}%` : '—'}
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtCOP(d.valor_total)}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                              {fmtCOP(d.valor_total)}
+                            </td>
                           </tr>
                         ))}
                         <tr style={{ background: 'var(--color-bg)' }}>
@@ -519,8 +580,9 @@ export default function CZPage() {
                   <button className="btn btn-danger btn-sm" onClick={() => eliminarCZ(czDetalle.cz_id)}>
                     <Trash2 size={14} /> Eliminar
                   </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => seleccionarGanadora(czDetalle.cz_id)}
-                    style={{ color: 'var(--color-warning)', borderColor: 'var(--color-warning-border)' }}>
+                  <button className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--color-warning)', borderColor: 'var(--color-warning-border)' }}
+                    onClick={() => seleccionarGanadora(czDetalle.cz_id)}>
                     <Star size={14} /> Seleccionar ganadora
                   </button>
                 </>
@@ -531,7 +593,9 @@ export default function CZPage() {
                   <span>Esta cotización fue seleccionada como ganadora</span>
                 </div>
               )}
-              <button className="btn btn-secondary" onClick={() => setShowDetalle(false)}>Cerrar</button>
+              <button className="btn btn-secondary" onClick={() => setShowDetalle(false)}>
+                Cerrar
+              </button>
             </div>
           </div>
         </div>

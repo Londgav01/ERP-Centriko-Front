@@ -4,7 +4,7 @@ import type {Rol} from '../../types'
 import {
   BarChart3, Building2, FileText, Package, Users,
   ShoppingCart, Warehouse, DollarSign, CheckCircle2,
-  LogOut, ChevronRight,
+  LogOut, ChevronRight, Settings,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -25,12 +25,14 @@ const MENU: MenuItem[] = [
   { label: 'Proveedores',      path: '/proveedores',    icon: <Users size={15}/>,        roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
   { label: 'Contratistas',     path: '/contratistas',   icon: <Users size={15}/>,        roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
   { label: 'Usuarios',         path: '/usuarios',       icon: <Users size={15}/>,        roles: ['ADMIN'],               grupo: 'Maestros' },
+  { label: 'Categorías',       path: '/categorias',     icon: <Settings size={15}/>,     roles: ['ADMIN'],               grupo: 'Maestros' },
   // Materiales
-  { label: 'Requisiciones',    path: '/requisiciones',  icon: <FileText size={15}/>,     roles: ['ADMIN','COORDINADOR','ING_RESIDENTE'], grupo: 'Materiales' },
-  { label: 'Cotizaciones',     path: '/cotizaciones',   icon: <DollarSign size={15}/>,   roles: ['ADMIN','COORDINADOR','ENC_COMPRAS'],   grupo: 'Materiales' },
-  { label: 'Órdenes de compra',path: '/ordenes-compra', icon: <ShoppingCart size={15}/>, roles: ['ADMIN','COORDINADOR','ENC_COMPRAS'],   grupo: 'Materiales' },
-  { label: 'Entradas almacén', path: '/entradas',       icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ALMACENISTA'],   grupo: 'Materiales' },
-  { label: 'Salidas almacén',  path: '/salidas',        icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ALMACENISTA'],   grupo: 'Materiales' },
+  { label: 'Requisiciones',    path: '/requisiciones',  icon: <FileText size={15}/>,     roles: ['ADMIN','COORDINADOR','ING_RESIDENTE'],               grupo: 'Materiales' },
+  { label: 'Cotizaciones',     path: '/cotizaciones',   icon: <DollarSign size={15}/>,   roles: ['ADMIN','COORDINADOR','ENC_COMPRAS'],                 grupo: 'Materiales' },
+  { label: 'Órdenes de compra',path: '/ordenes-compra', icon: <ShoppingCart size={15}/>, roles: ['ADMIN','COORDINADOR','ENC_COMPRAS'],                 grupo: 'Materiales' },
+  { label: 'Entradas almacén', path: '/entradas',       icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ALMACENISTA'],                 grupo: 'Materiales' },
+  { label: 'Inventario',       path: '/stock',          icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ING_RESIDENTE','ALMACENISTA'], grupo: 'Materiales' },
+  { label: 'Salidas almacén',  path: '/salidas',        icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ALMACENISTA'],                 grupo: 'Materiales' },
   // Contratos
   { label: 'Contratos',        path: '/contratos',      icon: <FileText size={15}/>,     roles: ['ADMIN','COORDINADOR'], grupo: 'Contratos' },
   { label: 'Anticipos',        path: '/anticipos',      icon: <DollarSign size={15}/>,   roles: ['ADMIN','COORDINADOR'], grupo: 'Contratos' },

@@ -8,6 +8,8 @@ import {
   X, Eye, Check, XCircle
 } from 'lucide-react'
 import NumericInput from '../../components/ui/NumericInput'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 interface CZDisponible {
   cz_id: string; rs_id: string; nombre_proveedor: string
@@ -17,12 +19,22 @@ interface CZDisponible {
 }
 
 interface OC {
-  oc_id: string; rs_id: string; cz_id: string
-  nombre_proveedor: string; nombre_proyecto: string
-  nombre_capitulo: string; subtotal: number
-  iva_pct: number; valor_iva: number; valor_total: number
-  estado: string; fecha_entrega_esperada: string
-  forma_pago: string; aprobado_por: string
+  oc_id: string
+  rs_id: string
+  cz_id: string
+  nombre_proveedor: string
+  subtotal: number
+  nombre_proyecto?: string
+  nombre_edificio?: string
+  nombre_capitulo?: string
+  codigo_capitulo?: string
+  iva_pct: number
+  valor_iva: number
+  valor_total: number
+  estado: string
+  fecha_entrega_esperada: string
+  forma_pago: string
+  aprobado_por: string
 }
 
 const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', {
@@ -38,8 +50,8 @@ const BADGE_ESTADO: Record<string, string> = {
   ANULADA:          'badge-danger',
 }
 
-const FORMAS_PAGO = ['CONTADO','15 DÍAS','30 DÍAS','45 DÍAS','60 DÍAS','CRÉDITO','CONTRAENTREGA']
-const ESTADOS     = ['BORRADOR','APROBADA','ENVIADA_PROV','RECIBIDA_PARCIAL','RECIBIDA_TOTAL','ANULADA']
+const FORMAS_PAGO  = ['CONTADO','15 DÍAS','30 DÍAS','45 DÍAS','60 DÍAS','CRÉDITO','CONTRAENTREGA']
+const ESTADOS      = ['BORRADOR','APROBADA','ENVIADA_PROV','RECIBIDA_PARCIAL','RECIBIDA_TOTAL','ANULADA']
 
 const EMPTY_FORM = {
   cz_id: '', forma_pago: '', fecha_entrega_esperada: '',
@@ -50,15 +62,18 @@ export default function OCPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
 
-  const [lista,         setLista]         = useState<OC[]>([])
-  const [czDisponibles, setCzDisponibles] = useState<CZDisponible[]>([])
-  const [filtroEstado,  setFiltroEstado]  = useState('')
+  const [lista,          setLista]          = useState<OC[]>([])
+  const pag = usePagination(lista)
+  const [czDisponibles,  setCzDisponibles]  = useState<CZDisponible[]>([])
+  const [filtroEstado,   setFiltroEstado]   = useState('')
 
-  const [showForm,  setShowForm]  = useState(false)
-  const [form,      setForm]      = useState(EMPTY_FORM)
-  const [czSel,     setCzSel]     = useState<CZDisponible | null>(null)
-  const [error,     setError]     = useState('')
-  const [cargando,  setCargando]  = useState(false)
+  const [showForm,    setShowForm]    = useState(false)
+  const [form,        setForm]        = useState(EMPTY_FORM)
+  const [czSel,       setCzSel]       = useState<CZDisponible | null>(null)
+  const [itemsCZ,     setItemsCZ]     = useState<any[]>([])
+  const [cargandoCZ,  setCargandoCZ]  = useState(false)
+  const [error,       setError]       = useState('')
+  const [cargando,    setCargando]    = useState(false)
 
   const [showDetalle,  setShowDetalle]  = useState(false)
   const [ocDetalle,    setOcDetalle]    = useState<OC | null>(null)
@@ -74,6 +89,7 @@ export default function OCPage() {
     ]).then(([rOC, rCZ]) => {
       setLista(rOC.data.data)
       setCzDisponibles(rCZ.data.data)
+      pag.reset()
     }).finally(() => setCargandoPagina(false))
   }, [])
 
@@ -82,16 +98,26 @@ export default function OCPage() {
     if (estado) params.append('estado', estado)
     const res = await api.get(`/api/oc?${params}`)
     setLista(res.data.data)
+    pag.reset()
   }
 
   const set = (key: string, val: any) => setForm(s => ({ ...s, [key]: val }))
 
-  // Al seleccionar CZ, autocompleta forma de pago
-  const handleCZ = (czId: string) => {
+  const handleCZ = async (czId: string) => {
     set('cz_id', czId)
     const cz = czDisponibles.find(c => c.cz_id === czId) || null
     setCzSel(cz)
     if (cz?.condiciones_pago) set('forma_pago', cz.condiciones_pago)
+
+    if (czId) {
+      setCargandoCZ(true)
+      try {
+        const res = await api.get(`/api/cz/${czId}`)
+        setItemsCZ(res.data.data.detalle)
+      } finally { setCargandoCZ(false) }
+    } else {
+      setItemsCZ([])
+    }
   }
 
   // Cálculos IVA en tiempo real
@@ -105,7 +131,8 @@ export default function OCPage() {
     try {
       await api.post('/api/oc', form)
       toast.success('Orden de compra creada correctamente')
-      setShowForm(false); setForm(EMPTY_FORM); setCzSel(null)
+      setShowForm(false); setForm(EMPTY_FORM)
+      setCzSel(null); setItemsCZ([])
       cargarLista()
       const rCZ = await api.get('/api/oc/cz-disponibles/lista')
       setCzDisponibles(rCZ.data.data)
@@ -125,7 +152,7 @@ export default function OCPage() {
   }
 
   const aprobar = async (ocId: string) => {
-    if (!confirm('¿Aprobar esta orden de compra? Se sumará al comprometido del capítulo.')) return
+    if (!confirm('¿Aprobar esta OC? Se sumará al comprometido del capítulo.')) return
     try {
       await api.put(`/api/oc/${ocId}/aprobar`, {})
       toast.success('OC aprobada — comprometido actualizado')
@@ -154,7 +181,8 @@ export default function OCPage() {
         </div>
         {puedeGestionar && (
           <button className="btn btn-primary" onClick={() => {
-            setForm(EMPTY_FORM); setCzSel(null); setError(''); setShowForm(true)
+            setForm(EMPTY_FORM); setCzSel(null)
+            setItemsCZ([]); setError(''); setShowForm(true)
           }}>
             <Plus size={15} /> Nueva OC
           </button>
@@ -179,33 +207,33 @@ export default function OCPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>OC ID</th><th>Proveedor</th><th>Proyecto / Capítulo</th>
-                <th>Forma de pago</th><th>Subtotal</th>
-                <th>IVA</th><th>Total</th><th>Estado</th><th>Acciones</th>
+                <th>OC ID</th>
+                <th>Proveedor</th>
+                <th>Capítulo</th>
+                <th style={{ textAlign: 'right' }}>Total</th>
+                <th>Estado</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {lista.length === 0 ? (
-                <tr><td colSpan={9}>
+                <tr><td colSpan={6}>
                   <div className="search-empty-state">
                     <ShoppingCart size={32} style={{ color: 'var(--color-text-muted)' }} />
                     <span>No hay órdenes de compra registradas</span>
                   </div>
                 </td></tr>
-              ) : lista.map(o => (
-                <tr key={o.oc_id}>
+              ) : (
+                <>
+                  {pag.itemsPagina.map(o => (
+                    <tr key={o.oc_id}>
                   <td className="td-id">{o.oc_id}</td>
                   <td className="td-bold">{o.nombre_proveedor}</td>
                   <td>
-                    <span className="td-bold">{o.nombre_proyecto}</span>
+                    <span className="td-bold" style={{ fontSize: 12 }}>{o.nombre_proyecto}</span>
                     <span className="td-muted" style={{ display: 'block' }}>{o.nombre_capitulo}</span>
                   </td>
-                  <td className="td-secondary">{o.forma_pago || '—'}</td>
-                  <td>{fmtCOP(o.subtotal)}</td>
-                  <td className="td-secondary">{o.iva_pct}%</td>
-                  <td style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                    {fmtCOP(o.valor_total)}
-                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtCOP(o.valor_total)}</td>
                   <td>
                     <span className={`badge ${BADGE_ESTADO[o.estado] || 'badge-neutral'}`}>
                       {o.estado}
@@ -217,25 +245,27 @@ export default function OCPage() {
                         <Eye size={13} /> Ver
                       </button>
                       {puedeAprobar && o.estado === 'BORRADOR' && (
-                        <button className="btn btn-ghost btn-sm"
-                          style={{ color: 'var(--color-success)' }}
+                        <button className="btn btn-primary btn-sm"
                           onClick={() => aprobar(o.oc_id)}>
                           <Check size={13} /> Aprobar
                         </button>
                       )}
                     </div>
                   </td>
-                </tr>
-              ))}
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
+          <Pagination {...pag} />
         </div>
       )}
 
       {/* ── Modal nueva OC ─────────────────────────────────── */}
       {showForm && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal modal-lg">
+          <div className="modal" style={{ width: 'min(1000px, 92vw)' }}>
             <div className="modal-header">
               <span className="modal-title">Nueva orden de compra</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}
@@ -271,15 +301,15 @@ export default function OCPage() {
                   )}
                 </div>
 
-                {/* Info de la CZ seleccionada */}
+                {/* Info CZ seleccionada */}
                 {czSel && (
                   <div className="system-values-box" style={{ marginBottom: 16 }}>
-                    <p className="system-values-box__title">Datos de la cotización seleccionada</p>
+                    <p className="system-values-box__title">Datos de la cotización</p>
                     <div className="form-grid-3">
                       {[
-                        { label: 'Proveedor',   value: czSel.nombre_proveedor },
-                        { label: 'Proyecto',    value: czSel.nombre_proyecto },
-                        { label: 'Capítulo',    value: czSel.nombre_capitulo },
+                        { label: 'Proveedor', value: czSel.nombre_proveedor },
+                        { label: 'Proyecto',  value: czSel.nombre_proyecto },
+                        { label: 'Capítulo',  value: czSel.nombre_capitulo },
                       ].map(f => (
                         <div className="form-group" key={f.label}>
                           <label className="form-label">{f.label}</label>
@@ -287,6 +317,56 @@ export default function OCPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Materiales de la CZ */}
+                {czSel && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label className="form-label" style={{ marginBottom: 8, display: 'block' }}>
+                      Materiales a ordenar
+                    </label>
+                    {cargandoCZ ? (
+                      <div className="page-loading" style={{ height: 70 }}>
+                        <Loader2 size={16} className="spinner" /><span>Cargando materiales...</span>
+                      </div>
+                    ) : (
+                      <div className="data-table-wrapper">
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>Material</th>
+                              <th style={{ textAlign: 'center' }}>Unidad</th>
+                              <th style={{ textAlign: 'right' }}>Cantidad</th>
+                              <th style={{ textAlign: 'right' }}>P. Unitario</th>
+                              <th style={{ textAlign: 'right' }}>Descuento</th>
+                              <th style={{ textAlign: 'right' }}>Total ítem</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {itemsCZ.map((item: any) => (
+                              <tr key={item.det_id}>
+                                <td className="td-bold">{item.nombre_material}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <span className="badge badge-neutral">{item.unidad}</span>
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  {item.cantidad.toLocaleString('es-CO')}
+                                </td>
+                                <td style={{ textAlign: 'right' }}>{fmtCOP(item.precio_unitario)}</td>
+                                <td style={{ textAlign: 'right',
+                                  color: item.descuento_pct > 0 ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+                                  {item.descuento_pct > 0 ? `${item.descuento_pct}%` : '—'}
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>
+                                  {fmtCOP(item.valor_total)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -314,7 +394,7 @@ export default function OCPage() {
                   </div>
                 </div>
 
-                {/* IVA + Resumen de valores */}
+                {/* IVA + Resumen */}
                 <div className="form-grid-2" style={{ marginBottom: 16 }}>
                   <div className="form-group">
                     <label className="form-label" htmlFor="oc-iva">IVA (%)</label>
@@ -324,11 +404,12 @@ export default function OCPage() {
                     <span className="form-hint">Default 19% — configurable por OC</span>
                   </div>
 
-                  {/* Resumen financiero */}
                   {czSel && (
                     <div style={{
-                      background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-md)', padding: '12px 16px',
+                      background: 'var(--color-bg)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '12px 16px',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
                         <span style={{ color: 'var(--color-text-secondary)' }}>Subtotal</span>
@@ -394,12 +475,15 @@ export default function OCPage() {
                   <div className="system-values-box" style={{ marginBottom: 16 }}>
                     <div className="form-grid-3">
                       {[
-                        { id: 'oc-dp', label: 'Proveedor',   value: ocDetalle.nombre_proveedor },
-                        { id: 'oc-dr', label: 'RS / CZ',     value: `${ocDetalle.rs_id} / ${ocDetalle.cz_id}` },
-                        { id: 'oc-de', label: 'Estado',      value: ocDetalle.estado },
-                        { id: 'oc-df', label: 'Forma pago',  value: ocDetalle.forma_pago || '—' },
-                        { id: 'oc-dfe',label: 'Fecha entrega',value: ocDetalle.fecha_entrega_esperada || '—' },
-                        { id: 'oc-dap',label: 'Aprobado por',value: ocDetalle.aprobado_por || '—' },
+                        { id: 'oc-dp',  label: 'Proveedor',    value: ocDetalle.nombre_proveedor },
+                        { id: 'oc-dpr', label: 'Proyecto',     value: ocDetalle.nombre_proyecto || '—' },
+                        { id: 'oc-de',  label: 'Edificación',  value: ocDetalle.nombre_edificio || '—' },
+                        { id: 'oc-dc',  label: 'Capítulo',     value: ocDetalle.nombre_capitulo || '—' },
+                        { id: 'oc-dr',  label: 'RS / CZ',      value: `${ocDetalle.rs_id} / ${ocDetalle.cz_id}` },
+                        { id: 'oc-dst', label: 'Estado',       value: ocDetalle.estado },
+                        { id: 'oc-df',  label: 'Forma pago',   value: ocDetalle.forma_pago || '—' },
+                        { id: 'oc-dfe', label: 'F. entrega',   value: ocDetalle.fecha_entrega_esperada || '—' },
+                        { id: 'oc-dap', label: 'Aprobado por', value: ocDetalle.aprobado_por || '—' },
                       ].map(f => (
                         <div className="form-group" key={f.id}>
                           <label className="form-label" htmlFor={f.id}>{f.label}</label>
@@ -409,7 +493,6 @@ export default function OCPage() {
                     </div>
                   </div>
 
-                  {/* Tabla ítems */}
                   <div className="data-table-wrapper" style={{ marginBottom: 16 }}>
                     <table className="data-table">
                       <thead>
@@ -436,15 +519,14 @@ export default function OCPage() {
                             <td style={{ textAlign: 'right', color: 'var(--color-success)', fontWeight: 600 }}>
                               {d.cant_recibida.toLocaleString('es-CO')}
                             </td>
-                            <td style={{ textAlign: 'right',
-                              color: d.pendiente > 0 ? 'var(--color-warning)' : 'var(--color-text-muted)',
-                              fontWeight: 600 }}>
+                            <td style={{
+                              textAlign: 'right', fontWeight: 600,
+                              color: d.pendiente > 0 ? 'var(--color-warning)' : 'var(--color-text-muted)'
+                            }}>
                               {d.pendiente.toLocaleString('es-CO')}
                             </td>
                           </tr>
                         ))}
-
-                        {/* Resumen financiero */}
                         <tr style={{ background: 'var(--color-bg)' }}>
                           <td colSpan={4} style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>Subtotal</td>
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCOP(ocDetalle.subtotal)}</td>

@@ -4,6 +4,8 @@ import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { Plus, Pencil, Building2, Loader2, AlertCircle, X } from 'lucide-react'
 import './ProyectosPage.css'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 interface Proyecto {
   proyecto_id: string
@@ -39,6 +41,7 @@ const BADGE: Record<string, string> = {
 export default function ProyectosPage() {
   const { toast } = useToast()
   const [proyectos, setProyectos] = useState<Proyecto[]>([])
+  const pag = usePagination(proyectos)
   const [form, setForm] = useState(EMPTY)
   const [presupuestoView, setPresupuestoView] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
@@ -51,6 +54,7 @@ export default function ProyectosPage() {
     try {
       const res = await api.get('/api/proyectos')
       setProyectos(res.data.data)
+      pag.reset()
     } finally { setCargandoPagina(false) }
   }
 
@@ -147,7 +151,7 @@ export default function ProyectosPage() {
                     No hay proyectos registrados. Crea el primero.
                   </div>
                 </td></tr>
-              ) : proyectos.map(p => (
+              ) : pag.itemsPagina.map(p => (
                 <tr key={p.proyecto_id}>
                   <td><span className="font-mono projects-table-id">{p.proyecto_id}</span></td>
                   <td className="projects-table-name">{p.nombre}</td>
@@ -169,6 +173,7 @@ export default function ProyectosPage() {
               ))}
             </tbody>
           </table>
+          <Pagination {...pag} />
         </div>
       )}
 

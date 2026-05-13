@@ -4,6 +4,8 @@ import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { Plus, Pencil, FileText, Loader2, AlertCircle, X } from 'lucide-react'
 import './CapitulosPage.css'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 interface Proyecto    { proyecto_id: string; nombre: string; presupuesto_total: number }
 interface Edificacion { edificio_id: string; nombre: string; proyecto_id: string }
@@ -43,6 +45,7 @@ export default function CapitulosPage() {
   const { toast } = useToast()
 
   const [capitulos,     setCapitulos]     = useState<Capitulo[]>([])
+  const pag = usePagination(capitulos)
   const [proyectos,     setProyectos]     = useState<Proyecto[]>([])
   const [edificaciones, setEdificaciones] = useState<Edificacion[]>([])
   const [edifFiltradas, setEdifFiltradas] = useState<Edificacion[]>([])
@@ -70,6 +73,7 @@ export default function CapitulosPage() {
       setProyectos(rP.data.data)
       setEdificaciones(rE.data.data)
       setCapitulos(rC.data.data)
+      pag.reset()
     }).finally(() => setCargandoPagina(false))
   }, [])
 
@@ -80,6 +84,7 @@ export default function CapitulosPage() {
     if (edifId) params.append('edificio_id', edifId)
     const res = await api.get(`/api/capitulos?${params}`)
     setCapitulos(res.data.data)
+    pag.reset()
   }
 
   const calcularDisponible = async (proyId: string, capIdExcluir = '') => {
@@ -265,7 +270,7 @@ export default function CapitulosPage() {
                     No hay capítulos registrados
                   </div>
                 </td></tr>
-              ) : capitulos.map(cap => {
+              ) : pag.itemsPagina.map(cap => {
                 const pctGasto  = cap.valor_presupuestado > 0
                   ? (cap.valor_ejecutado / cap.valor_presupuestado) * 100 : 0
                 const enRiesgo  = pctGasto > cap.avance_fisico_pct && cap.avance_fisico_pct > 0
@@ -307,6 +312,7 @@ export default function CapitulosPage() {
               })}
             </tbody>
           </table>
+          <Pagination {...pag} />
         </div>
       )}
 

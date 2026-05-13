@@ -4,11 +4,6 @@ import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { Plus, Pencil, Users, Loader2, AlertCircle, X, Search } from 'lucide-react'
 
-const ESPECIALIDADES = [
-  'ESTRUCTURA','MAMPOSTERÍA','INSTALACIONES_HID',
-  'INSTALACIONES_ELEC','ACABADOS','CARPINTERÍA','OBRA_GRUESA','VARIOS'
-]
-
 interface Contratista {
   contratista_id: string; nombre: string; nit: string
   especialidad: string; contacto: string; telefono: string
@@ -55,8 +50,17 @@ export default function ContratistasPage() {
   const [error,    setError]    = useState('')
   const [nitError, setNitError] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [especialidadesOpts, setEspecialidadesOpts] = useState<string[]>([])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    api.get('/api/categorias?tipo=CONTRATISTA&activo=1')
+      .then(res => {
+        setEspecialidadesOpts(res.data.data.map((c: any) => c.nombre))
+      })
+      .catch(() => setEspecialidadesOpts([]))
+  }, [])
 
     const buscar = async (q: string, especialidad: string, activo: string) => {
     setBuscando(true); setHasBuscado(true)
@@ -173,8 +177,7 @@ export default function ContratistasPage() {
           style={{ width: 200 }}
         >
           <option value="">Todas las especialidades</option>
-          <option value="SIN_ESPECIALIDAD">Sin especialidad</option>  {/* ← agregar */}
-          {ESPECIALIDADES.map(e => <option key={e} value={e}>{e}</option>)}
+          {especialidadesOpts.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
 
         <select

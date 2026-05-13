@@ -4,6 +4,8 @@ import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { Plus, Pencil, Building2, Loader2, AlertCircle, X } from 'lucide-react'
 import './EdificacionesPage.css'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 interface Proyecto { proyecto_id: string; nombre: string }
 interface Edificacion {
@@ -24,6 +26,7 @@ const BADGE: Record<string, string> = {
 export default function EdificacionesPage() {
   const { toast } = useToast()
   const [edificaciones, setEdificaciones] = useState<Edificacion[]>([])
+  const pag = usePagination(edificaciones)
   const [proyectos, setProyectos] = useState<Proyecto[]>([])
   const [filtroProyecto, setFiltroProyecto] = useState('')
   const [form, setForm] = useState(EMPTY)
@@ -42,6 +45,7 @@ export default function EdificacionesPage() {
     const params = proyectoId ? `?proyecto_id=${proyectoId}` : ''
     const res = await api.get(`/api/edificaciones${params}`)
     setEdificaciones(res.data.data)
+    pag.reset()
     setCargandoPagina(false)
   }
 
@@ -147,7 +151,7 @@ export default function EdificacionesPage() {
                     No hay edificaciones registradas
                   </div>
                 </td></tr>
-              ) : edificaciones.map(e => (
+              ) : pag.itemsPagina.map(e => (
                 <tr key={e.edificio_id}>
                   <td><span className="font-mono td-id">{e.edificio_id}</span></td>
                   <td className="td-project">
@@ -170,6 +174,7 @@ export default function EdificacionesPage() {
               ))}
             </tbody>
           </table>
+          <Pagination {...pag} />
         </div>
       )}
 

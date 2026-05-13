@@ -4,6 +4,8 @@ import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
 import { Plus, Pencil, Users, Loader2, AlertCircle, X, Eye, EyeOff } from 'lucide-react'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 const ROLES = [
   { valor: 'ADMIN',         label: 'Administrador',        badge: 'badge-danger' },
@@ -37,6 +39,7 @@ export default function UsuariosPage() {
   const { usuario: yo } = useAuth()
 
   const [usuarios,   setUsuarios]   = useState<Usuario[]>([])
+  const pag = usePagination(usuarios)
   const [proyectos,  setProyectos]  = useState<Proyecto[]>([])
   const [cargandoPagina, setCargandoPagina] = useState(true)
 
@@ -56,6 +59,7 @@ export default function UsuariosPage() {
       ])
       setUsuarios(rU.data.data)
       setProyectos(rP.data.data)
+      pag.reset()
     } finally { setCargandoPagina(false) }
   }
 
@@ -155,12 +159,14 @@ export default function UsuariosPage() {
                     <span>No hay usuarios registrados</span>
                   </div>
                 </td></tr>
-              ) : usuarios.map(u => (
-                <tr key={u.usuario_id}>
+              ) : (
+                <>
+                  {pag.itemsPagina.map(u => (
+                    <tr key={u.usuario_id}>
                   <td className="td-id">{u.usuario_id}</td>
                   <td className="td-bold">
                     {u.nombre}
-                    {u.usuario_id === yo?.id && (
+                    {String(u.usuario_id) === String(yo?.id) && (
                       <span className="badge badge-info" style={{ marginLeft: 6 }}>Tú</span>
                     )}
                   </td>
@@ -188,10 +194,13 @@ export default function UsuariosPage() {
                       </button>
                     </div>
                   </td>
-                </tr>
-              ))}
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
+          <Pagination {...pag} />
         </div>
       )}
 
@@ -284,8 +293,10 @@ export default function UsuariosPage() {
 
                 {/* Contraseña */}
                 <div className="form-group" style={{ marginBottom: 16 }}>
-                  <label className="form-label" htmlFor="usr-pass"
-                    className={`form-label ${!editId ? 'required' : ''}`}>
+                  <label
+                    className={`form-label ${!editId ? 'required' : ''}`}
+                    htmlFor="usr-pass"
+                  >
                     {editId ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña'}
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -328,10 +339,10 @@ export default function UsuariosPage() {
                       className={`toggle ${form.activo ? 'on' : 'off'}`}
                       onClick={() => set('activo', !form.activo)}
                       aria-label={form.activo ? 'Desactivar usuario' : 'Activar usuario'}
-                      disabled={editId === yo?.id}
+                      disabled={String(editId) === String(yo?.id)}
                     />
                     <span className="toggle-label">
-                      {editId === yo?.id
+                      {String(editId) === String(yo?.id)
                         ? 'No puedes desactivar tu propio usuario'
                         : form.activo
                           ? 'Usuario activo — puede iniciar sesión'

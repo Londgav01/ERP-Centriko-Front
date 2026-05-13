@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import NumericInput from '../../components/ui/NumericInput'
 import './RSPage.css'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 interface Proyecto    { proyecto_id: string; nombre: string }
 interface Edificacion { edificio_id: string; nombre: string; proyecto_id: string }
@@ -55,6 +57,7 @@ export default function RSPage() {
   const { usuario } = useAuth()
 
   const [lista,         setLista]         = useState<RS[]>([])
+  const pag = usePagination(lista)
   const [proyectos,     setProyectos]     = useState<Proyecto[]>([])
   const [edificaciones, setEdificaciones] = useState<Edificacion[]>([])
   const [capitulos,     setCapitulos]     = useState<Capitulo[]>([])
@@ -96,6 +99,7 @@ export default function RSPage() {
       setProyectos(rP.data.data)
       setEdificaciones(rE.data.data)
       setCapitulos(rC.data.data)
+      pag.reset()
     }).finally(() => setCargandoPagina(false))
   }, [])
 
@@ -105,6 +109,7 @@ export default function RSPage() {
     if (proyId) params.append('proyecto_id', proyId)
     const res = await api.get(`/api/rs?${params}`)
     setLista(res.data.data)
+    pag.reset()
   }
 
   const set = (key: string, val: any) => setForm(s => ({ ...s, [key]: val }))
@@ -124,7 +129,7 @@ export default function RSPage() {
   const buscarMaterial = (idx: number, q: string) => {
     setMatBusqueda(s => ({ ...s, [idx]: q }))
     if (debMatRef.current[idx]) clearTimeout(debMatRef.current[idx])
-    if (q.length < 3) { setMatSugerencias(s => ({ ...s, [idx]: [] })); return }
+    if (q.length < 1) { setMatSugerencias(s => ({ ...s, [idx]: [] })); return }
     debMatRef.current[idx] = setTimeout(async () => {
       try {
         const res = await api.get(`/api/materiales?q=${encodeURIComponent(q)}&activo=1`)
@@ -223,6 +228,7 @@ export default function RSPage() {
 
   const puedeCrear   = ['ADMIN','COORDINADOR','ING_RESIDENTE'].includes(usuario?.rol || '')
   const puedeAprobar = ['ADMIN','COORDINADOR'].includes(usuario?.rol || '')
+  const soloLectura  = usuario?.rol === 'ALMACENISTA'
 
   return (
     <MainLayout>
@@ -240,6 +246,13 @@ export default function RSPage() {
           </button>
         )}
       </div>
+
+      {soloLectura && (
+        <div className="alert alert-info rs-readonly-alert">
+          <AlertCircle size={15} style={{ flexShrink: 0 }} />
+          <span>Modo solo lectura — el almacenista puede consultar requisiciones pero no crearlas ni modificarlas</span>
+        </div>
+      )}
 
       <div className="page-filters">
         <select className="form-select rs-filter-select--estado" value={filtroEstado}
@@ -275,8 +288,10 @@ export default function RSPage() {
                     <span>No hay requisiciones registradas</span>
                   </div>
                 </td></tr>
-              ) : lista.map(r => (
-                <tr key={r.rs_id}>
+              ) : (
+                <>
+                  {pag.itemsPagina.map(r => (
+                    <tr key={r.rs_id}>
                   <td className="td-id">{r.rs_id}</td>
                   <td>
                     <span className="td-bold">{r.nombre_proyecto}</span>
@@ -298,10 +313,13 @@ export default function RSPage() {
                       )}
                     </div>
                   </td>
-                </tr>
-              ))}
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
+          <Pagination {...pag} />
         </div>
       )}
 

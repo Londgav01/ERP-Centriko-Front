@@ -108,11 +108,26 @@ body {
 }
 .form-hint      { font-size: 11px; color: var(--color-text-muted); }
 .form-error-msg { font-size: 11px; color: var(--color-danger); display: flex; align-items: center; gap: 4px; }
+.form-select--w140 { width: 140px; }
+.form-select--w150 { width: 150px; }
+.form-select--w160 { width: 160px; }
+.form-select--w180 { width: 180px; }
+.modal-close-button { padding: 0 6px; }
+.form-section-gap { margin-bottom: 16px; }
+.font-mono-strong { font-weight: 600; }
+.td-ellipsis {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-strong { font-weight: 600; }
 
 /* ── Modal ──────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(15, 23, 42, 0.55);
+  -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   display: flex; align-items: center; justify-content: center;
   z-index: 200; animation: fadeIn 150ms ease;
@@ -144,6 +159,54 @@ body {
 .data-table-wrapper {
   background: white; border: 1px solid var(--color-border);
   border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.pagination-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.pagination-info {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.pagination-info strong {
+  color: var(--color-text-primary);
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pagination-nav-button {
+  padding: 0 8px;
+}
+.pagination-dots {
+  padding: 0 6px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.pagination-page-button {
+  width: 32px;
+  height: 28px;
+  font-family: inherit;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.pagination-page-button.is-active {
+  font-weight: 700;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
 }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table thead tr { background: var(--color-bg); border-bottom: 1px solid var(--color-border); }

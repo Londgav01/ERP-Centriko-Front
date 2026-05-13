@@ -9,9 +9,16 @@ import MaterialesPage from './pages/materiales/MaterialesPage'
 import ProveedoresPage from './pages/proveedores/ProveedoresPage'
 import ContratistasPage from './pages/contratistas/ContratistasPage'
 import UsuariosPage from './pages/usuarios/UsuariosPage'
+import CategoriasPage from './pages/admin/CategoriasPage'
 import RSPage from './pages/rs/RSPage'
 import CZPage from './pages/cz/CZPage'
 import OCPage from './pages/oc/OCPage'
+import EAPage from './pages/ea/EAPage'
+import StockPage from './pages/stock/StockPage'
+import SAPage from './pages/sa/SAPage'
+import CTPage from './pages/ct/CTPage'
+import ANPage from './pages/an/ANPage'
+import AVPage from './pages/av/AVPage'
 
 
 
@@ -35,9 +42,16 @@ export default function App() {
       <Route path="/proveedores" element={<RutaProtegida><ProveedoresPage /></RutaProtegida>} />
       <Route path="/contratistas" element={<RutaProtegida><ContratistasPage /></RutaProtegida>} />
       <Route path="/usuarios" element={<RutaProtegida><UsuariosPage /></RutaProtegida>} />
+      <Route path="/categorias" element={<RutaProtegida><CategoriasPage /></RutaProtegida>} />
       <Route path="/requisiciones" element={<RutaProtegida><RSPage /></RutaProtegida>} />
       <Route path="/cotizaciones" element={<RutaProtegida><CZPage /></RutaProtegida>} />
       <Route path="/ordenes-compra" element={<RutaProtegida><OCPage /></RutaProtegida>} />
+      <Route path="/entradas" element={<RutaProtegida><EAPage /></RutaProtegida>} />
+      <Route path="/stock" element={<RutaProtegida><StockPage /></RutaProtegida>} />
+      <Route path="/salidas" element={<RutaProtegida><SAPage /></RutaProtegida>} />
+      <Route path="/contratos" element={<RutaProtegida><CTPage /></RutaProtegida>} />
+      <Route path="/anticipos" element={<RutaProtegida><ANPage /></RutaProtegida>} />
+      <Route path="/actas" element={<RutaProtegida><AVPage /></RutaProtegida>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

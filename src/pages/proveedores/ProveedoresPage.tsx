@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { Plus, Pencil, Users, Loader2, AlertCircle, X, Search } from 'lucide-react'
-
-const CATEGORIAS = ['MATERIALES','HERRAMIENTA','EQUIPOS','SERVICIOS','VARIOS']
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 interface Proveedor {
   proveedor_id: string; nombre: string; nit: string
@@ -30,6 +30,7 @@ export default function ProveedoresPage() {
   const { toast } = useToast()
 
   const [proveedores,  setProveedores]  = useState<Proveedor[]>([])
+  const pag = usePagination(proveedores)
   const [busqueda,     setBusqueda]     = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroActivo, setFiltroActivo] = useState('')
@@ -42,8 +43,17 @@ export default function ProveedoresPage() {
   const [error,    setError]    = useState('')
   const [nitError, setNitError] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [categoriasOpts, setCategoriasOpts] = useState<string[]>([])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    api.get('/api/categorias?tipo=PROVEEDOR&activo=1')
+      .then(res => {
+        setCategoriasOpts(res.data.data.map((c: any) => c.nombre))
+      })
+      .catch(() => setCategoriasOpts([]))
+  }, [])
 
   const buscar = async (q: string, categoria: string, activo: string) => {
     const activar = q.length >= 3 || categoria || activo !== ''
@@ -57,6 +67,7 @@ export default function ProveedoresPage() {
       if (activo !== '') params.append('activo', activo)
       const res = await api.get(`/api/proveedores?${params}`)
       setProveedores(res.data.data)
+      pag.reset()
     } finally { setBuscando(false) }
   }
 
@@ -144,22 +155,20 @@ export default function ProveedoresPage() {
         </div>
 
         <select
-          className="form-select"
+          className="form-select form-select--w160"
           value={filtroCategoria}
           onChange={e => handleFiltro(e.target.value, filtroActivo)}
           aria-label="Filtrar por categoría"
-          style={{ width: 160 }}
         >
           <option value="">Todas las categorías</option>
-          {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+          {categoriasOpts.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
         <select
-          className="form-select"
+          className="form-select form-select--w150"
           value={filtroActivo}
           onChange={e => handleFiltro(filtroCategoria, e.target.value)}
           aria-label="Filtrar por estado"
-          style={{ width: 150 }}
         >
           <option value="">Activo e inactivo</option>
           <option value="1">Solo activos</option>
@@ -185,50 +194,53 @@ export default function ProveedoresPage() {
             <span>No se encontraron proveedores con ese criterio</span>
           </div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Razón social</th>
-                <th>NIT</th>
-                <th>Categoría</th>
-                <th>Contacto</th>
-                <th>Teléfono</th>
-                <th>Ciudad</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {proveedores.map(p => (
-                <tr key={p.proveedor_id}>
-                  <td className="td-id">{p.proveedor_id}</td>
-                  <td className="td-bold">{p.nombre}</td>
-                  <td><span className="font-mono">{p.nit}</span></td>
-                  <td>
-                    {p.categoria
-                      ? <span className="badge badge-info">{p.categoria}</span>
-                      : <span className="td-muted">—</span>}
-                  </td>
-                  <td className="td-secondary">{p.contacto || '—'}</td>
-                  <td className="td-secondary">{p.telefono || '—'}</td>
-                  <td className="td-secondary">{p.ciudad || '—'}</td>
-                  <td>
-                    <span className={`badge ${p.activo ? 'badge-success' : 'badge-danger'}`}>
-                      {p.activo ? 'ACTIVO' : 'INACTIVO'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="table-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(p)}>
-                        <Pencil size={13} /> Editar
-                      </button>
-                    </div>
-                  </td>
+          <>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Razón social</th>
+                  <th>NIT</th>
+                  <th>Categoría</th>
+                  <th>Contacto</th>
+                  <th>Teléfono</th>
+                  <th>Ciudad</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pag.itemsPagina.map(p => (
+                  <tr key={p.proveedor_id}>
+                    <td className="td-id">{p.proveedor_id}</td>
+                    <td className="td-bold">{p.nombre}</td>
+                    <td><span className="font-mono">{p.nit}</span></td>
+                    <td>
+                      {p.categoria
+                        ? <span className="badge badge-info">{p.categoria}</span>
+                        : <span className="td-muted">—</span>}
+                    </td>
+                    <td className="td-secondary">{p.contacto || '—'}</td>
+                    <td className="td-secondary">{p.telefono || '—'}</td>
+                    <td className="td-secondary">{p.ciudad || '—'}</td>
+                    <td>
+                      <span className={`badge ${p.activo ? 'badge-success' : 'badge-danger'}`}>
+                        {p.activo ? 'ACTIVO' : 'INACTIVO'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(p)}>
+                          <Pencil size={13} /> Editar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pagination {...pag} />
+          </>
         )}
       </div>
 
@@ -240,8 +252,8 @@ export default function ProveedoresPage() {
               <span className="modal-title">
                 {editId ? `Editar — ${editId}` : 'Nuevo proveedor'}
               </span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}
-                style={{ padding: '0 6px' }} aria-label="Cerrar">
+              <button className="btn btn-ghost btn-sm modal-close-button" onClick={() => setShowForm(false)}
+                aria-label="Cerrar">
                 <X size={16} />
               </button>
             </div>
@@ -256,7 +268,7 @@ export default function ProveedoresPage() {
                 )}
 
                 {/* Razón social + NIT */}
-                <div className="form-grid-2" style={{ marginBottom: 16 }}>
+                <div className="form-grid-2 form-section-gap">
                   <div className="form-group">
                     <label className="form-label required" htmlFor="prov-nombre">Razón social</label>
                     <input
@@ -284,7 +296,7 @@ export default function ProveedoresPage() {
                 </div>
 
                 {/* Categoría + Ciudad */}
-                <div className="form-grid-2" style={{ marginBottom: 16 }}>
+                <div className="form-grid-2 form-section-gap">
                   <div className="form-group">
                     <label className="form-label" htmlFor="prov-cat">Categoría</label>
                     <select
@@ -311,7 +323,7 @@ export default function ProveedoresPage() {
                 </div>
 
                 {/* Contacto + Teléfono + Email */}
-                <div className="form-grid-3" style={{ marginBottom: 16 }}>
+                <div className="form-grid-3 form-section-gap">
                   <div className="form-group">
                     <label className="form-label" htmlFor="prov-contacto">Persona de contacto</label>
                     <input

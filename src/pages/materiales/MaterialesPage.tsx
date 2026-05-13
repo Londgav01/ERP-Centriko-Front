@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { Plus, Pencil, Package, Loader2, AlertCircle, X, Search } from 'lucide-react'
+import { usePagination } from '../../hooks/usePagination'
+import Pagination from '../../components/ui/Pagination'
 
 const UNIDADES   = ['UN','ML','M2','M3','KG','TON','GL','LT','BOLSA','ROLLO','JUEGO','OTROS']
-const CATEGORIAS = ['CONCRETO','ACERO','MAMPOSTERÍA','ACABADOS','ELÉCTRICO','HIDROSANITARIO','MADERA','VIDRIO','PINTURA','HERRAMIENTA','EQUIPOS','VARIOS']
 
 interface Material {
   material_id: string; codigo: string; nombre: string
@@ -28,6 +29,7 @@ export default function MaterialesPage() {
   const { toast } = useToast()
 
   const [materiales, setMateriales]   = useState<Material[]>([])
+  const pag = usePagination(materiales)
   const [busqueda,   setBusqueda]     = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroActivo,    setFiltroActivo]    = useState('')
@@ -41,12 +43,21 @@ export default function MaterialesPage() {
   const [cargando, setCargando] = useState(false)
 
   const [precioView, setPrecioView] = useState('')
+  const [categoriasOpts, setCategoriasOpts] = useState<string[]>([])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  useEffect(() => {
+    api.get('/api/categorias?tipo=MATERIAL&activo=1')
+      .then(res => {
+        setCategoriasOpts(res.data.data.map((c: any) => c.nombre))
+      })
+      .catch(() => setCategoriasOpts([]))
+  }, [])
+
   // ── Búsqueda con debounce (fix C-09) ──────────────────────
   const buscar = async (q: string, categoria: string, activo: string) => {
-    const activarBusqueda = q.length >= 3 || categoria || activo !== ''
+    const activarBusqueda = q.length >= 1 || categoria || activo !== ''
     if (!activarBusqueda) { setMateriales([]); setHasBuscado(false); return }
 
     setBuscando(true)
@@ -58,6 +69,7 @@ export default function MaterialesPage() {
       if (activo !== '') params.append('activo', activo)
       const res = await api.get(`/api/materiales?${params}`)
       setMateriales(res.data.data)
+      pag.reset()
     } finally { setBuscando(false) }
   }
 
@@ -139,22 +151,20 @@ export default function MaterialesPage() {
         </div>
 
         <select
-          className="form-select"
+          className="form-select form-select--w180"
           value={filtroCategoria}
           onChange={e => handleFiltro(e.target.value, filtroActivo)}
           aria-label="Filtrar por categoría"
-          style={{ width: 180 }}
         >
           <option value="">Todas las categorías</option>
-          {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+          {categoriasOpts.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
         <select
-          className="form-select"
+          className="form-select form-select--w140"
           value={filtroActivo}
           onChange={e => handleFiltro(filtroCategoria, e.target.value)}
           aria-label="Filtrar por estado"
-          style={{ width: 140 }}
         >
           <option value="">Activo e inactivo</option>
           <option value="1">Solo activos</option>
@@ -180,48 +190,51 @@ export default function MaterialesPage() {
             <span>No se encontraron materiales con ese criterio</span>
           </div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Descripción</th>
-                <th>Unidad</th>
-                <th>Categoría</th>
-                <th>Precio ref.</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {materiales.map(m => (
-                <tr key={m.material_id}>
-                  <td className="td-id">{m.material_id}</td>
-                  <td><span className="font-mono" style={{ fontWeight: 600 }}>{m.codigo}</span></td>
-                  <td className="td-bold">{m.nombre}</td>
-                  <td className="td-secondary" style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.descripcion || '—'}
-                  </td>
-                  <td><span className="badge badge-neutral">{m.unidad}</span></td>
-                  <td className="td-muted">{m.categoria || '—'}</td>
-                  <td style={{ fontWeight: 600 }}>{fmtCOP(m.precio_ref)}</td>
-                  <td>
-                    <span className={`badge ${m.activo ? 'badge-success' : 'badge-danger'}`}>
-                      {m.activo ? 'ACTIVO' : 'INACTIVO'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="table-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(m)}>
-                        <Pencil size={13} /> Editar
-                      </button>
-                    </div>
-                  </td>
+          <>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Código</th>
+                  <th>Nombre</th>
+                  <th>Descripción</th>
+                  <th>Unidad</th>
+                  <th>Categoría</th>
+                  <th>Precio ref.</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pag.itemsPagina.map(m => (
+                  <tr key={m.material_id}>
+                    <td className="td-id">{m.material_id}</td>
+                    <td><span className="font-mono font-mono-strong">{m.codigo}</span></td>
+                    <td className="td-bold">{m.nombre}</td>
+                    <td className="td-secondary td-ellipsis">
+                      {m.descripcion || '—'}
+                    </td>
+                    <td><span className="badge badge-neutral">{m.unidad}</span></td>
+                    <td className="td-muted">{m.categoria || '—'}</td>
+                    <td className="td-strong">{fmtCOP(m.precio_ref)}</td>
+                    <td>
+                      <span className={`badge ${m.activo ? 'badge-success' : 'badge-danger'}`}>
+                        {m.activo ? 'ACTIVO' : 'INACTIVO'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(m)}>
+                          <Pencil size={13} /> Editar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pagination {...pag} />
+          </>
         )}
       </div>
 
@@ -233,8 +246,8 @@ export default function MaterialesPage() {
               <span className="modal-title">
                 {editId ? `Editar — ${editId}` : 'Nuevo material'}
               </span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}
-                style={{ padding: '0 6px' }} aria-label="Cerrar">
+              <button className="btn btn-ghost btn-sm modal-close-button" onClick={() => setShowForm(false)}
+                aria-label="Cerrar">
                 <X size={16} />
               </button>
             </div>
@@ -249,7 +262,7 @@ export default function MaterialesPage() {
                 )}
 
                 {/* Código + Nombre */}
-                <div className="form-grid-3" style={{ marginBottom: 16 }}>
+                <div className="form-grid-3 form-section-gap">
                   <div className="form-group">
                     <label className="form-label required" htmlFor="mat-codigo">Código</label>
                     <input
@@ -274,7 +287,7 @@ export default function MaterialesPage() {
                 </div>
 
                 {/* Descripción */}
-                <div className="form-group" style={{ marginBottom: 16 }}>
+                <div className="form-group form-section-gap">
                   <label className="form-label" htmlFor="mat-desc">Descripción</label>
                   <textarea
                     id="mat-desc"
@@ -287,7 +300,7 @@ export default function MaterialesPage() {
                 </div>
 
                 {/* Unidad + Categoría + Precio */}
-                <div className="form-grid-3" style={{ marginBottom: 16 }}>
+                <div className="form-grid-3 form-section-gap">
                   <div className="form-group">
                     <label className="form-label required" htmlFor="mat-unidad">Unidad de medida</label>
                     <select

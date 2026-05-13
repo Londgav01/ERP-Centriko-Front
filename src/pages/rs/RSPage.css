@@ -1,6 +1,7 @@
 /* ── Filtros ──────────────────────────────────── */
 .rs-filter-select--estado   { width: 160px; }
 .rs-filter-select--proyecto { width: 240px; }
+.rs-readonly-alert          { margin-bottom: 16px; }
 
 /* ── Tabla principal ──────────────────────────── */
 .rs-muted-icon     { color: var(--color-text-muted); }
