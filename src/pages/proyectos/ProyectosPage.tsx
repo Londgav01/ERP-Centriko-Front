@@ -93,6 +93,11 @@ export default function ProyectosPage() {
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault(); setCargando(true); setError('')
     try {
+      if (form.fecha_inicio && form.fecha_fin_esperada && form.fecha_fin_esperada < form.fecha_inicio) {
+        setError('La fecha de fin no puede ser anterior a la fecha de inicio');
+        setCargando(false)
+        return
+      }
       if (editId) {
         await api.put(`/api/proyectos/${editId}`, form)
         toast.success('Proyecto actualizado correctamente')
@@ -265,6 +270,7 @@ export default function ProyectosPage() {
                     <label className="form-label" htmlFor="proyecto-fecha-fin">Fecha fin esperada</label>
                     <input type="date" className="form-input" value={form.fecha_fin_esperada}
                       id="proyecto-fecha-fin"
+                      min={form.fecha_inicio || undefined}
                       onChange={e => set('fecha_fin_esperada', e.target.value)} />
                   </div>
                 </div>

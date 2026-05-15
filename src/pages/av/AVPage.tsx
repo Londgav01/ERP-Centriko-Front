@@ -3,43 +3,47 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
-import {
-  Plus, CheckCircle2, Loader2, AlertCircle,
-  X, Eye, Check, XCircle, Trash2
-} from 'lucide-react'
-import NumericInput from '../../components/ui/NumericInput'
 import { usePagination } from '../../hooks/usePagination'
 import Pagination from '../../components/ui/Pagination'
+import {
+  Plus, CheckCircle2, Loader2, AlertCircle,
+  X, Eye, Check, XCircle
+} from 'lucide-react'
+import NumericInput from '../../components/ui/NumericInput'
 
 interface CTDisponible {
   ct_id: string; nombre_contratista: string
   nombre_proyecto: string; nombre_capitulo: string
   valor_contrato: number; pct_anticipo: number
-  avance_anterior: number; valor_ejecutado_ct: number
+  valor_ejecutado_ct: number
+}
+
+interface ItemCT {
+  det_id: string; capitulo_id: string; nombre_capitulo: string
+  descripcion: string; unidad: string
+  valor_unidad: number; cantidad: number
+  valor_total: number; valor_con_holgura: number
+  cant_ejecutada_anterior: number; cant_disponible: number
+  // Campos que llena el usuario
+  cant_ejec_este_acta: number
+  cant_ejec_acumulada: number
+  pct_avance: number
+  valor_ejecutado_item: number
+  notas: string
 }
 
 interface AnticipActivo {
   an_id: string; monto_anticipo: number
-  amortizado: number; saldo_amortizar: number; estado: string
-}
-
-interface Actividad {
-  descripcion_actividad: string; unidad: string
-  cantidad_contratada: number; cant_ejec_acumulada: number
-  cant_ejec_este_acta: number; pct_avance: number
-  precio_unitario: number; notas: string
+  amortizado: number; saldo_amortizar: number
 }
 
 interface AV {
-  av_id: string; ct_id: string; capitulo_id: string
-  nombre_capitulo: string; nombre_contratista: string
-  nombre_proyecto?: string; valor_contrato: number
-  periodo_desde: string; periodo_hasta: string
+  av_id: string; ct_id: string; nombre_capitulo: string
+  nombre_contratista: string; valor_contrato: number
   pct_avance_acumulado: number; pct_avance_este_acta: number
   valor_acta: number; vr_amortiz_anticipo: number
   retencion_pct: number; vr_retencion: number
-  valor_neto_pagar: number; estado: string
-  aprobado_por: string; notas: string; timestamp: string
+  valor_neto_pagar: number; estado: string; timestamp: string
 }
 
 const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', {
@@ -55,15 +59,7 @@ const BADGE_ESTADO: Record<string, string> = {
 
 const EMPTY_FORM = {
   ct_id: '', periodo_desde: '', periodo_hasta: '',
-  pct_avance_acumulado: 0, valor_acta: 0,
   retencion_pct: 5, notas: ''
-}
-
-const EMPTY_ACTIVIDAD: Actividad = {
-  descripcion_actividad: '', unidad: '',
-  cantidad_contratada: 0, cant_ejec_acumulada: 0,
-  cant_ejec_este_acta: 0, pct_avance: 0,
-  precio_unitario: 0, notas: ''
 }
 
 export default function AVPage() {
@@ -71,15 +67,14 @@ export default function AVPage() {
   const { usuario } = useAuth()
 
   const [lista,        setLista]        = useState<AV[]>([])
-  const pag = usePagination(lista)
   const [ctDisponibles, setCtDisponibles] = useState<CTDisponible[]>([])
   const [filtroEstado, setFiltroEstado] = useState('')
 
   const [showForm,   setShowForm]   = useState(false)
   const [form,       setForm]       = useState(EMPTY_FORM)
   const [ctSel,      setCtSel]      = useState<CTDisponible | null>(null)
+  const [itemsCT,    setItemsCT]    = useState<ItemCT[]>([])
   const [anticipo,   setAnticipo]   = useState<AnticipActivo | null>(null)
-  const [actividades, setActividades] = useState<Actividad[]>([])
   const [error,      setError]      = useState('')
   const [cargando,   setCargando]   = useState(false)
   const [cargandoCT, setCargandoCT] = useState(false)
@@ -90,6 +85,7 @@ export default function AVPage() {
   const [cargandoDet,  setCargandoDet]  = useState(false)
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
+  const pag = usePagination(lista)
 
   useEffect(() => {
     Promise.all([
@@ -98,7 +94,6 @@ export default function AVPage() {
     ]).then(([rAV, rCT]) => {
       setLista(rAV.data.data)
       setCtDisponibles(rCT.data.data)
-      pag.reset()
     }).finally(() => setCargandoPagina(false))
   }, [])
 
@@ -106,8 +101,7 @@ export default function AVPage() {
     const params = new URLSearchParams()
     if (estado) params.append('estado', estado)
     const res = await api.get(`/api/av?${params}`)
-    setLista(res.data.data)
-    pag.reset()
+    setLista(res.data.data); pag.reset()
   }
 
   const set = (key: string, val: any) => setForm(s => ({ ...s, [key]: val }))
@@ -115,68 +109,110 @@ export default function AVPage() {
   const handleCT = async (ctId: string) => {
     const ct = ctDisponibles.find(c => c.ct_id === ctId) || null
     setCtSel(ct)
-    setForm(s => ({
-      ...s, ct_id: ctId,
-      pct_avance_acumulado: ct?.avance_anterior || 0
-    }))
-    setAnticipo(null)
+    setForm(s => ({ ...s, ct_id: ctId }))
+    setItemsCT([]); setAnticipo(null)
 
-    if (ctId) {
-      setCargandoCT(true)
-      try {
-        const res = await api.get(`/api/av/anticipo-activo/${ctId}`)
-        setAnticipo(res.data.data)
-      } finally { setCargandoCT(false) }
-    }
+    if (!ctId) return
+    setCargandoCT(true)
+    try {
+      const [rItems, rAN] = await Promise.all([
+        api.get(`/api/av/items-ct/${ctId}`),
+        api.get(`/api/av/anticipo-activo/${ctId}`),
+      ])
+      setAnticipo(rAN.data.data)
+
+      // Inicializar ítems con valores vacíos para que el usuario los llene
+      setItemsCT(rItems.data.data.map((item: any) => ({
+        ...item,
+        cant_ejec_este_acta:  0,
+        cant_ejec_acumulada:  item.cant_ejecutada_anterior,
+        pct_avance:           item.cantidad > 0
+          ? Math.round((item.cant_ejecutada_anterior / item.cantidad) * 1000) / 10
+          : 0,
+        valor_ejecutado_item: 0,
+        notas: '',
+      })))
+    } finally { setCargandoCT(false) }
   }
 
-  // Cálculos en tiempo real
-  const pctAnterior  = ctSel?.avance_anterior || 0
-  const pctEsteActa  = form.pct_avance_acumulado - pctAnterior
+  // Actualizar ítem y recalcular automáticamente
+  const actualizarItem = (idx: number, key: string, val: number | string) => {
+    const nuevos = [...itemsCT]
+    const item   = { ...nuevos[idx], [key]: val }
+
+    if (key === 'cant_ejec_este_acta') {
+      // Acumulada = anterior + este acta
+      item.cant_ejec_acumulada = item.cant_ejecutada_anterior + Number(val)
+      // % avance = acumulada / contratada × 100
+      item.pct_avance = item.cantidad > 0
+        ? Math.round((item.cant_ejec_acumulada / item.cantidad) * 1000) / 10
+        : 0
+    }
+
+    // Valor ejecutado = este acta × valor unitario
+    item.valor_ejecutado_item = item.cant_ejec_este_acta * item.valor_unidad
+
+    nuevos[idx] = item
+    setItemsCT(nuevos)
+  }
+
+  // Cálculos globales en tiempo real
+  const valorActa    = itemsCT.reduce((s, i) => s + i.valor_ejecutado_item, 0)
   const saldoCT      = ctSel ? ctSel.valor_contrato - ctSel.valor_ejecutado_ct : 0
+  const superaSaldo  = valorActa > saldoCT && saldoCT > 0
 
   const vrAmortiz = (() => {
     if (!anticipo || anticipo.saldo_amortizar <= 0 || !ctSel) return 0
-    const calc = (form.valor_acta / ctSel.valor_contrato) * anticipo.monto_anticipo
+    const calc = (valorActa / ctSel.valor_contrato) * anticipo.monto_anticipo
     return Math.min(calc, anticipo.saldo_amortizar)
   })()
 
-  const vrRetencion  = form.valor_acta * ((form.retencion_pct || 0) / 100)
-  const valorNeto    = form.valor_acta - vrAmortiz - vrRetencion
+  const vrRetencion = valorActa * ((form.retencion_pct || 0) / 100)
+  const valorNeto   = valorActa - vrAmortiz - vrRetencion
 
-  const avanceRetrocede = form.pct_avance_acumulado < pctAnterior
-  const superaSaldo     = form.valor_acta > saldoCT && saldoCT > 0
+  // Avance físico ponderado
+  const avanceFisicoGlobal = itemsCT.length > 0
+    ? itemsCT.reduce((s, i) => s + (i.pct_avance * (i.cantidad || 1)), 0) /
+      itemsCT.reduce((s, i) => s + (i.cantidad || 1), 0)
+    : 0
 
-  // Actividades
-  const agregarActividad = () =>
-    setActividades(s => [...s, { ...EMPTY_ACTIVIDAD }])
-
-  const eliminarActividad = (idx: number) =>
-    setActividades(s => s.filter((_, i) => i !== idx))
-
-  const actualizarActividad = (idx: number, key: string, val: any) => {
-    const nuevas = [...actividades]
-    nuevas[idx] = { ...nuevas[idx], [key]: val }
-    // Calcular pct_avance de la actividad
-    if (key === 'cant_ejec_este_acta' || key === 'cantidad_contratada') {
-      const pct = nuevas[idx].cantidad_contratada > 0
-        ? (nuevas[idx].cant_ejec_este_acta / nuevas[idx].cantidad_contratada) * 100 : 0
-      nuevas[idx].pct_avance = Math.round(pct * 10) / 10
-    }
-    setActividades(nuevas)
-  }
+  // Validación: algún ítem supera lo contratado
+  const itemsConError = itemsCT.filter(i =>
+    i.cant_ejec_acumulada > i.cantidad
+  )
 
   const guardar = async (ev: React.FormEvent) => {
     ev.preventDefault()
-    if (avanceRetrocede) { setError(`El avance no puede retroceder. Anterior: ${pctAnterior}%`); return }
-    if (superaSaldo) { setError(`El valor supera el saldo del contrato (${fmtCOP(saldoCT)})`); return }
+
+    if (itemsCT.length === 0) { setError('No hay capítulos cargados'); return }
+    if (valorActa <= 0)  { setError('El valor del acta debe ser mayor a cero'); return }
+    if (superaSaldo)     { setError(`El valor supera el saldo del contrato (${fmtCOP(saldoCT)})`); return }
+    if (form.periodo_desde && form.periodo_hasta && form.periodo_hasta < form.periodo_desde)
+      { setError('La fecha de fin del período no puede ser anterior a la fecha de inicio'); return }
+    if (itemsConError.length > 0)
+      { setError(`"${itemsConError[0].nombre_capitulo}": la cantidad acumulada supera lo contratado`); return }
 
     setCargando(true); setError('')
     try {
-      await api.post('/api/av', { ...form, actividades })
+      await api.post('/api/av', {
+        ...form,
+        items_capitulos: itemsCT.map(i => ({
+          det_id:              i.det_id,
+          capitulo_id:         i.capitulo_id,
+          nombre_capitulo:     i.nombre_capitulo,
+          descripcion:         i.descripcion,
+          unidad:              i.unidad,
+          valor_unidad:        i.valor_unidad,
+          cantidad_contratada: i.cantidad,
+          cant_ejec_acumulada: i.cant_ejec_acumulada,
+          cant_ejec_este_acta: i.cant_ejec_este_acta,
+          pct_avance:          i.pct_avance,
+          notas:               i.notas,
+        }))
+      })
       toast.success('Acta de avance creada correctamente')
       setShowForm(false); setForm(EMPTY_FORM)
-      setCtSel(null); setAnticipo(null); setActividades([])
+      setCtSel(null); setAnticipo(null); setItemsCT([])
       cargarLista()
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Error al guardar'
@@ -194,10 +230,10 @@ export default function AVPage() {
   }
 
   const aprobar = async (avId: string) => {
-    if (!confirm('¿Aprobar esta acta? Se actualizará el ejecutado y el avance físico del capítulo.')) return
+    if (!confirm('¿Aprobar esta acta? Se actualizará el ejecutado y el avance físico de cada capítulo.')) return
     try {
       await api.put(`/api/av/${avId}/aprobar`, {})
-      toast.success('Acta aprobada — ejecutado y avance actualizados')
+      toast.success('Acta aprobada — ejecutado y avance actualizados por capítulo')
       setShowDetalle(false); cargarLista()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Error') }
   }
@@ -224,7 +260,7 @@ export default function AVPage() {
         {puedeCrear && (
           <button className="btn btn-primary" onClick={() => {
             setForm(EMPTY_FORM); setCtSel(null)
-            setAnticipo(null); setActividades([])
+            setAnticipo(null); setItemsCT([])
             setError(''); setShowForm(true)
           }}>
             <Plus size={15} /> Nueva acta
@@ -254,7 +290,6 @@ export default function AVPage() {
             <thead>
               <tr>
                 <th>AV ID</th><th>Contrato</th><th>Contratista</th>
-                <th>Capítulo</th>
                 <th style={{ textAlign: 'right' }}>Valor acta</th>
                 <th style={{ textAlign: 'center' }}>Avance</th>
                 <th style={{ textAlign: 'right' }}>Neto a pagar</th>
@@ -262,23 +297,20 @@ export default function AVPage() {
               </tr>
             </thead>
             <tbody>
-              {lista.length === 0 ? (
-                <tr><td colSpan={9}>
+              {pag.itemsPagina.length === 0 ? (
+                <tr><td colSpan={8}>
                   <div className="search-empty-state">
                     <CheckCircle2 size={32} style={{ color: 'var(--color-text-muted)' }} />
                     <span>No hay actas de avance registradas</span>
                   </div>
                 </td></tr>
-              ) : (
-                <>
-                  {pag.itemsPagina.map(a => (
-                    <tr key={a.av_id}>
+              ) : pag.itemsPagina.map(a => (
+                <tr key={a.av_id}>
                   <td className="td-id">{a.av_id}</td>
                   <td className="td-id">{a.ct_id}</td>
                   <td className="td-bold">{a.nombre_contratista}</td>
-                  <td className="td-secondary">{a.nombre_capitulo}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtCOP(a.valor_acta)}</td>
-                  <td style={{ textAlign: 'center' }}>
+                  <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
                       <div style={{ width: 50, height: 5, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
                         <div style={{
@@ -312,10 +344,8 @@ export default function AVPage() {
                       )}
                     </div>
                   </td>
-                    </tr>
-                  ))}
-                </>
-              )}
+                </tr>
+              ))}
             </tbody>
           </table>
           <Pagination {...pag} />
@@ -325,7 +355,7 @@ export default function AVPage() {
       {/* ── Modal nueva AV ─────────────────────────────────── */}
       {showForm && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal" style={{ width: 'min(1060px, 92vw)' }}>
+          <div className="modal" style={{ width: 'min(1100px, 92vw)' }}>
             <div className="modal-header">
               <span className="modal-title">Nueva acta de avance</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}
@@ -342,80 +372,49 @@ export default function AVPage() {
 
                 {/* CT */}
                 <div className="form-group" style={{ marginBottom: 16 }}>
-                  <label className="form-label required" htmlFor="av-ct">
-                    Contrato en ejecución
-                  </label>
+                  <label className="form-label required" htmlFor="av-ct">Contrato en ejecución</label>
                   <select id="av-ct" className="form-select" value={form.ct_id}
                     onChange={e => handleCT(e.target.value)} required aria-label="Contrato">
                     <option value="">Selecciona un contrato...</option>
                     {ctDisponibles.map(ct => (
                       <option key={ct.ct_id} value={ct.ct_id}>
-                        {ct.ct_id} — {ct.nombre_contratista} | {ct.nombre_proyecto} / {ct.nombre_capitulo}
+                        {ct.ct_id} — {ct.nombre_contratista} | {ct.nombre_proyecto}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Info CT + avance */}
+                {/* Info CT */}
                 {ctSel && (
                   <div className="system-values-box" style={{ marginBottom: 16 }}>
-                    <p className="system-values-box__title">Estado del contrato</p>
-                    <div className="form-grid-3" style={{ marginBottom: 12 }}>
+                    <p className="system-values-box__title">Estado financiero del contrato</p>
+                    <div className="form-grid-3">
                       {[
                         { label: 'Valor contrato',   value: fmtCOP(ctSel.valor_contrato) },
                         { label: 'Ejecutado a hoy',  value: fmtCOP(ctSel.valor_ejecutado_ct) },
-                        { label: 'Saldo disponible', value: fmtCOP(saldoCT) },
+                        { label: 'Saldo disponible', value: fmtCOP(saldoCT),
+                          color: saldoCT <= 0 ? 'var(--color-danger)' : 'var(--color-success)' },
                       ].map(f => (
                         <div className="form-group" key={f.label}>
                           <label className="form-label">{f.label}</label>
-                          <input className="form-input font-mono" value={f.value} disabled />
+                          <input className="form-input font-mono" value={f.value} disabled
+                            style={f.color ? { color: f.color, fontWeight: 700 } : undefined} />
                         </div>
                       ))}
                     </div>
 
-                    {/* Barra de avance */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
-                        <span style={{ color: 'var(--color-text-muted)' }}>Avance anterior</span>
-                        <span style={{ fontWeight: 600 }}>{pctAnterior}%</span>
-                      </div>
-                      <div style={{ height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
-                        <div style={{
-                          height: '100%', borderRadius: 4,
-                          width: `${Math.min(form.pct_avance_acumulado, 100)}%`,
-                          background: avanceRetrocede ? 'var(--color-danger)' : 'var(--color-primary)',
-                          transition: 'width 0.3s ease',
-                        }} />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        <span>0%</span>
-                        {pctAnterior > 0 && (
-                          <span style={{ color: 'var(--color-primary)' }}>Anterior: {pctAnterior}%</span>
-                        )}
-                        <span>100%</span>
-                      </div>
-                    </div>
-
-                    {/* Anticipo activo */}
-                    {cargandoCT ? (
-                      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                        Cargando anticipo...
-                      </div>
-                    ) : anticipo ? (
-                      <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--color-warning-bg)', borderRadius: 'var(--radius-md)', fontSize: 12 }}>
-                        <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>Anticipo activo: </span>
-                        {fmtCOP(anticipo.monto_anticipo)} — Saldo por amortizar: <strong>{fmtCOP(anticipo.saldo_amortizar)}</strong>
-                      </div>
-                    ) : (
-                      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                        Sin anticipo activo — no se calculará amortización
+                    {anticipo && (
+                      <div style={{ marginTop: 10, padding: '8px 12px',
+                        background: 'var(--color-warning-bg)', borderRadius: 'var(--radius-md)', fontSize: 12 }}>
+                        <strong style={{ color: 'var(--color-warning)' }}>Anticipo activo: </strong>
+                        {fmtCOP(anticipo.monto_anticipo)} — Saldo: <strong>{fmtCOP(anticipo.saldo_amortizar)}</strong>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Periodo */}
-                <div className="form-grid-2" style={{ marginBottom: 16 }}>
+                {/* Período + Retención */}
+                <div className="form-grid-3" style={{ marginBottom: 16 }}>
                   <div className="form-group">
                     <label className="form-label" htmlFor="av-desde">Período desde</label>
                     <input id="av-desde" type="date" className="form-input"
@@ -426,40 +425,8 @@ export default function AVPage() {
                     <label className="form-label" htmlFor="av-hasta">Período hasta</label>
                     <input id="av-hasta" type="date" className="form-input"
                       value={form.periodo_hasta}
+                      min={form.periodo_desde || undefined}
                       onChange={e => set('periodo_hasta', e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Avance + Valor + Retención */}
-                <div className="form-grid-3" style={{ marginBottom: 16 }}>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="av-pct">
-                      % Avance acumulado
-                    </label>
-                    <NumericInput id="av-pct" value={form.pct_avance_acumulado}
-                      onChange={val => set('pct_avance_acumulado', val)}
-                      suffix="%" decimals={1} required />
-                    {avanceRetrocede && (
-                      <span className="hint-error">
-                        No puede retroceder (anterior: {pctAnterior}%)
-                      </span>
-                    )}
-                    {!avanceRetrocede && pctEsteActa > 0 && (
-                      <span className="hint-ok">
-                        Este acta: +{pctEsteActa.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="av-valor">Valor del acta (COP)</label>
-                    <NumericInput id="av-valor" value={form.valor_acta}
-                      onChange={val => set('valor_acta', val)}
-                      prefix="$" required />
-                    {superaSaldo && (
-                      <span className="hint-error">
-                        Supera el saldo: {fmtCOP(saldoCT)}
-                      </span>
-                    )}
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="av-ret">Retención (%)</label>
@@ -469,118 +436,157 @@ export default function AVPage() {
                   </div>
                 </div>
 
-                {/* Resumen financiero */}
-                {form.valor_acta > 0 && (
-                  <div style={{
-                    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: 16
-                  }}>
-                    <p className="system-values-box__title" style={{ marginBottom: 10 }}>
-                      Liquidación del acta
-                    </p>
-                    {[
-                      { label: 'Valor bruto acta',    value: fmtCOP(form.valor_acta), color: 'var(--color-text-primary)' },
-                      { label: `Retención (${form.retencion_pct}%)`, value: `- ${fmtCOP(vrRetencion)}`, color: 'var(--color-danger)' },
-                      { label: 'Amortización anticipo', value: `- ${fmtCOP(vrAmortiz)}`, color: 'var(--color-warning)' },
-                    ].map(f => (
-                      <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
-                        <span style={{ color: 'var(--color-text-secondary)' }}>{f.label}</span>
-                        <span style={{ fontWeight: 600, color: f.color }}>{f.value}</span>
-                      </div>
-                    ))}
-                    <div style={{
-                      display: 'flex', justifyContent: 'space-between',
-                      paddingTop: 10, marginTop: 4,
-                      borderTop: '2px solid var(--color-border)',
-                    }}>
-                      <span style={{ fontWeight: 700 }}>Neto a pagar</span>
-                      <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-success)' }}>
-                        {fmtCOP(valorNeto)}
+                {/* Tabla de capítulos */}
+                {cargandoCT ? (
+                  <div className="page-loading" style={{ height: 80 }}>
+                    <Loader2 size={16} className="spinner" /><span>Cargando capítulos...</span>
+                  </div>
+                ) : itemsCT.length > 0 ? (
+                  <>
+                    <label className="form-label" style={{ marginBottom: 8, display: 'block' }}>
+                      Ejecución por capítulo
+                      <span className="form-hint" style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+                        Ingresa la cantidad ejecutada en este acta — el resto se calcula automáticamente
                       </span>
-                    </div>
-                  </div>
-                )}
+                    </label>
 
-                {/* Tabla de actividades */}
-                <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" style={{ margin: 0 }}>
-                    Actividades ejecutadas <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>(opcional)</span>
-                  </label>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={agregarActividad}>
-                    <Plus size={13} /> Agregar actividad
-                  </button>
-                </div>
-
-                {actividades.length > 0 && (
-                  <div className="data-table-wrapper" style={{ marginBottom: 16 }}>
-                    <table className="data-table" style={{ tableLayout: 'fixed' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ width: '28%' }}>Descripción actividad</th>
-                          <th style={{ width: '7%' }}>Unidad</th>
-                          <th style={{ width: '11%' }}>Cant. contratada</th>
-                          <th style={{ width: '11%' }}>Cant. acumulada</th>
-                          <th style={{ width: '11%' }}>Este acta</th>
-                          <th style={{ width: '8%' }}>% Avance</th>
-                          <th style={{ width: '13%' }}>P. Unitario</th>
-                          <th style={{ width: '7%' }}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {actividades.map((act, idx) => (
-                          <tr key={idx}>
-                            <td>
-                              <input className="form-input" style={{ fontSize: 12 }}
-                                value={act.descripcion_actividad}
-                                onChange={e => actualizarActividad(idx, 'descripcion_actividad', e.target.value)}
-                                placeholder="Descripción"
-                                aria-label={`Actividad ${idx + 1}`} />
-                            </td>
-                            <td>
-                              <input className="form-input" style={{ fontSize: 12 }}
-                                value={act.unidad}
-                                onChange={e => actualizarActividad(idx, 'unidad', e.target.value)}
-                                placeholder="UN"
-                                aria-label="Unidad" />
-                            </td>
-                            <td>
-                              <NumericInput value={act.cantidad_contratada}
-                                onChange={val => actualizarActividad(idx, 'cantidad_contratada', val)}
-                                decimals={2} />
-                            </td>
-                            <td>
-                              <NumericInput value={act.cant_ejec_acumulada}
-                                onChange={val => actualizarActividad(idx, 'cant_ejec_acumulada', val)}
-                                decimals={2} />
-                            </td>
-                            <td>
-                              <NumericInput value={act.cant_ejec_este_acta}
-                                onChange={val => actualizarActividad(idx, 'cant_ejec_este_acta', val)}
-                                decimals={2} />
-                            </td>
-                            <td style={{ textAlign: 'center', fontWeight: 600,
-                              color: act.pct_avance > 0 ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
-                              {act.pct_avance.toFixed(1)}%
-                            </td>
-                            <td>
-                              <NumericInput value={act.precio_unitario}
-                                onChange={val => actualizarActividad(idx, 'precio_unitario', val)}
-                                prefix="$" decimals={0} />
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              <button type="button" className="btn btn-danger btn-sm"
-                                onClick={() => eliminarActividad(idx)}
-                                style={{ padding: '0 6px' }}
-                                aria-label="Eliminar actividad">
-                                <Trash2 size={13} />
-                              </button>
-                            </td>
+                    <div className="data-table-wrapper" style={{ marginBottom: 16 }}>
+                      <table className="data-table" style={{ tableLayout: 'fixed' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '18%' }}>Capítulo</th>
+                            <th style={{ width: '16%' }}>Ítem</th>
+                            <th style={{ width: '6%' }}>Und.</th>
+                            <th style={{ width: '10%', textAlign: 'right' }}>Contratado</th>
+                            <th style={{ width: '10%', textAlign: 'right' }}>Ant. ejec.</th>
+                            <th style={{ width: '12%' }}>Este acta</th>
+                            <th style={{ width: '10%', textAlign: 'right' }}>Acumulado</th>
+                            <th style={{ width: '8%', textAlign: 'right' }}>% Avance</th>
+                            <th style={{ width: '10%', textAlign: 'right' }}>Valor</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {itemsCT.map((item, idx) => {
+                            const excede = item.cant_ejec_acumulada > item.cantidad
+                            return (
+                              <tr key={item.det_id}
+                                style={{ background: excede ? 'rgba(220,38,38,0.04)' : undefined }}>
+                                <td>
+                                  <span className="font-mono" style={{ fontSize: 11, color: 'var(--color-primary)' }}>
+                                    {item.capitulo_id}
+                                  </span>
+                                  <span className="td-muted" style={{ display: 'block', fontSize: 11 }}>
+                                    {item.nombre_capitulo}
+                                  </span>
+                                </td>
+                                <td className="td-secondary" style={{ fontSize: 12 }}>{item.descripcion}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <span className="badge badge-neutral" style={{ fontSize: 10 }}>{item.unidad}</span>
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                  {item.cantidad.toLocaleString('es-CO')}
+                                </td>
+                                <td style={{ textAlign: 'right', color: 'var(--color-text-muted)' }}>
+                                  {item.cant_ejecutada_anterior.toLocaleString('es-CO')}
+                                </td>
+                                <td>
+                                  <NumericInput
+                                    value={item.cant_ejec_este_acta}
+                                    onChange={val => actualizarItem(idx, 'cant_ejec_este_acta', val)}
+                                    decimals={2}
+                                  />
+                                  {excede && (
+                                    <span className="hint-error" style={{ fontSize: 10 }}>
+                                      Supera contratado
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'right',
+                                  fontWeight: 600,
+                                  color: excede ? 'var(--color-danger)' : 'var(--color-text-primary)' }}>
+                                  {item.cant_ejec_acumulada.toLocaleString('es-CO')}
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 700,
+                                  color: item.pct_avance >= 100 ? 'var(--color-success)' : 'var(--color-primary)' }}>
+                                  {item.pct_avance.toFixed(1)}%
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>
+                                  {fmtCOP(item.valor_ejecutado_item)}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Resumen financiero */}
+                    {valorActa > 0 && (
+                      <div style={{
+                        background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: 16
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 32 }}>
+                          {/* Avance físico */}
+                          <div style={{ flex: 1 }}>
+                            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)',
+                              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                              Avance físico ponderado
+                            </p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ flex: 1, height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                                <div style={{
+                                  height: '100%', borderRadius: 4,
+                                  width: `${Math.min(avanceFisicoGlobal, 100)}%`,
+                                  background: 'var(--color-primary)',
+                                }} />
+                              </div>
+                              <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-primary)', minWidth: 50 }}>
+                                {avanceFisicoGlobal.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Liquidación */}
+                          <div style={{ minWidth: 240 }}>
+                            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)',
+                              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                              Liquidación del acta
+                            </p>
+                            {[
+                              { label: 'Valor bruto',      value: fmtCOP(valorActa),    color: 'var(--color-text-primary)' },
+                              { label: `Retención (${form.retencion_pct}%)`, value: `- ${fmtCOP(vrRetencion)}`, color: 'var(--color-danger)' },
+                              { label: 'Amortización',     value: `- ${fmtCOP(vrAmortiz)}`, color: 'var(--color-warning)' },
+                            ].map(f => (
+                              <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12 }}>
+                                <span style={{ color: 'var(--color-text-secondary)' }}>{f.label}</span>
+                                <span style={{ fontWeight: 600, color: f.color }}>{f.value}</span>
+                              </div>
+                            ))}
+                            <div style={{ display: 'flex', justifyContent: 'space-between',
+                              paddingTop: 8, borderTop: '2px solid var(--color-border)', marginTop: 4 }}>
+                              <span style={{ fontWeight: 700 }}>Neto a pagar</span>
+                              <span style={{ fontWeight: 700, fontSize: 15,
+                                color: superaSaldo ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                                {fmtCOP(valorNeto)}
+                              </span>
+                            </div>
+                            {superaSaldo && (
+                              <div className="hint-error" style={{ marginTop: 6 }}>
+                                El valor supera el saldo del contrato ({fmtCOP(saldoCT)})
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : form.ct_id && !cargandoCT ? (
+                  <div className="alert alert-warning">
+                    <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                    <span>Este contrato no tiene capítulos registrados en CT_DETALLE</span>
                   </div>
-                )}
+                ) : null}
 
                 {/* Notas */}
                 <div className="form-group">
@@ -596,7 +602,7 @@ export default function AVPage() {
                   Cancelar
                 </button>
                 <button type="submit" className="btn btn-primary"
-                  disabled={cargando || avanceRetrocede || superaSaldo || !form.ct_id}>
+                  disabled={cargando || superaSaldo || itemsConError.length > 0 || !form.ct_id || valorActa <= 0}>
                   {cargando
                     ? <><Loader2 size={14} className="spinner" /> Guardando...</>
                     : 'Crear acta'
@@ -611,7 +617,7 @@ export default function AVPage() {
       {/* ── Modal detalle AV ───────────────────────────────── */}
       {showDetalle && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowDetalle(false)}>
-          <div className="modal" style={{ width: 'min(900px, 92vw)' }}>
+          <div className="modal" style={{ width: 'min(960px, 92vw)' }}>
             <div className="modal-header">
               <span className="modal-title">Acta — {avDetalle?.av_id}</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowDetalle(false)}
@@ -626,12 +632,9 @@ export default function AVPage() {
                   <div className="system-values-box" style={{ marginBottom: 16 }}>
                     <div className="form-grid-3">
                       {[
-                        { id: 'av-dc',  label: 'Contrato',    value: avDetalle.ct_id },
-                        { id: 'av-dn',  label: 'Contratista', value: avDetalle.nombre_contratista },
-                        { id: 'av-dca', label: 'Capítulo',    value: avDetalle.nombre_capitulo },
-                        { id: 'av-de',  label: 'Estado',      value: avDetalle.estado },
-                        { id: 'av-dd',  label: 'Período',     value: avDetalle.periodo_desde && avDetalle.periodo_hasta ? `${avDetalle.periodo_desde} / ${avDetalle.periodo_hasta}` : '—' },
-                        { id: 'av-da',  label: 'Aprobado por',value: avDetalle.aprobado_por || '—' },
+                        { id: 'avd-ct', label: 'Contrato',    value: avDetalle.ct_id },
+                        { id: 'avd-cn', label: 'Contratista', value: avDetalle.nombre_contratista },
+                        { id: 'avd-es', label: 'Estado',      value: avDetalle.estado },
                       ].map(f => (
                         <div className="form-group" key={f.id}>
                           <label className="form-label" htmlFor={f.id}>{f.label}</label>
@@ -644,52 +647,31 @@ export default function AVPage() {
                   {/* Avance */}
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Avance acumulado</span>
+                      <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Avance físico acumulado</span>
                       <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
-                        {avDetalle.pct_avance_acumulado}% (+{avDetalle.pct_avance_este_acta.toFixed(1)}% este acta)
+                        {avDetalle.pct_avance_acumulado}%
+                        <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: 6 }}>
+                          (+{avDetalle.pct_avance_este_acta}% este acta)
+                        </span>
                       </span>
                     </div>
-                    <div style={{ height: 10, background: '#e2e8f0', borderRadius: 5, overflow: 'hidden' }}>
+                    <div style={{ height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
                       <div style={{
-                        height: '100%', borderRadius: 5,
+                        height: '100%', borderRadius: 4,
                         width: `${Math.min(avDetalle.pct_avance_acumulado, 100)}%`,
                         background: 'var(--color-primary)',
                       }} />
                     </div>
                   </div>
 
-                  {/* Liquidación */}
-                  <div style={{
-                    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: 16
-                  }}>
-                    <p className="system-values-box__title" style={{ marginBottom: 10 }}>Liquidación</p>
-                    {[
-                      { label: 'Valor acta',            value: fmtCOP(avDetalle.valor_acta), color: 'var(--color-text-primary)' },
-                      { label: `Retención (${avDetalle.retencion_pct}%)`, value: `- ${fmtCOP(avDetalle.vr_retencion)}`, color: 'var(--color-danger)' },
-                      { label: 'Amortización anticipo', value: `- ${fmtCOP(avDetalle.vr_amortiz_anticipo)}`, color: 'var(--color-warning)' },
-                    ].map(f => (
-                      <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
-                        <span style={{ color: 'var(--color-text-secondary)' }}>{f.label}</span>
-                        <span style={{ fontWeight: 600, color: f.color }}>{f.value}</span>
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '2px solid var(--color-border)' }}>
-                      <span style={{ fontWeight: 700 }}>Neto a pagar</span>
-                      <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-success)' }}>
-                        {fmtCOP(avDetalle.valor_neto_pagar)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actividades */}
+                  {/* Detalle capítulos */}
                   {detalleItems.length > 0 && (
-                    <div className="data-table-wrapper">
+                    <div className="data-table-wrapper" style={{ marginBottom: 16 }}>
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>Actividad</th>
-                            <th style={{ textAlign: 'center' }}>Unidad</th>
+                            <th>Ítem</th>
+                            <th style={{ textAlign: 'center' }}>Und.</th>
                             <th style={{ textAlign: 'right' }}>Contratado</th>
                             <th style={{ textAlign: 'right' }}>Acumulado</th>
                             <th style={{ textAlign: 'right' }}>Este acta</th>
@@ -700,23 +682,61 @@ export default function AVPage() {
                         <tbody>
                           {detalleItems.map((d: any) => (
                             <tr key={d.det_id}>
-                              <td className="td-bold">{d.descripcion_actividad}</td>
+                              <td>
+                                <span className="td-bold">{d.descripcion_actividad}</span>
+                                <span className="td-muted" style={{ display: 'block', fontSize: 11 }}>
+                                  {d.capitulo_id}
+                                </span>
+                              </td>
                               <td style={{ textAlign: 'center' }}>
                                 <span className="badge badge-neutral">{d.unidad}</span>
                               </td>
-                              <td style={{ textAlign: 'right' }}>{d.cantidad_contratada.toLocaleString('es-CO')}</td>
-                              <td style={{ textAlign: 'right' }}>{d.cant_ejec_acumulada.toLocaleString('es-CO')}</td>
-                              <td style={{ textAlign: 'right', fontWeight: 600 }}>{d.cant_ejec_este_acta.toLocaleString('es-CO')}</td>
-                              <td style={{ textAlign: 'right', color: 'var(--color-primary)', fontWeight: 600 }}>
+                              <td style={{ textAlign: 'right' }}>
+                                {d.cantidad_contratada.toLocaleString('es-CO')}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                {d.cant_ejec_acumulada.toLocaleString('es-CO')}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                {d.cant_ejec_este_acta.toLocaleString('es-CO')}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>
                                 {d.pct_avance}%
                               </td>
-                              <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCOP(d.valor_ejecutado)}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                {fmtCOP(d.valor_ejecutado)}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   )}
+
+                  {/* Liquidación */}
+                  <div style={{
+                    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-md)', padding: '14px 16px'
+                  }}>
+                    <p className="system-values-box__title" style={{ marginBottom: 10 }}>Liquidación</p>
+                    {[
+                      { label: 'Valor acta',            value: fmtCOP(avDetalle.valor_acta),           color: 'var(--color-text-primary)' },
+                      { label: `Retención (${avDetalle.retencion_pct}%)`, value: `- ${fmtCOP(avDetalle.vr_retencion)}`, color: 'var(--color-danger)' },
+                      { label: 'Amortización anticipo', value: `- ${fmtCOP(avDetalle.vr_amortiz_anticipo)}`, color: 'var(--color-warning)' },
+                    ].map(f => (
+                      <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>{f.label}</span>
+                        <span style={{ fontWeight: 600, color: f.color }}>{f.value}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between',
+                      paddingTop: 10, borderTop: '2px solid var(--color-border)' }}>
+                      <span style={{ fontWeight: 700 }}>Neto a pagar</span>
+                      <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-success)' }}>
+                        {fmtCOP(avDetalle.valor_neto_pagar)}
+                      </span>
+                    </div>
+                  </div>
                 </>
               )}
             </div>

@@ -19,6 +19,7 @@ import SAPage from './pages/sa/SAPage'
 import CTPage from './pages/ct/CTPage'
 import ANPage from './pages/an/ANPage'
 import AVPage from './pages/av/AVPage'
+import ReportesPage from './pages/reportes/ReportesPage'
 
 
 
@@ -52,6 +53,7 @@ export default function App() {
       <Route path="/contratos" element={<RutaProtegida><CTPage /></RutaProtegida>} />
       <Route path="/anticipos" element={<RutaProtegida><ANPage /></RutaProtegida>} />
       <Route path="/actas" element={<RutaProtegida><AVPage /></RutaProtegida>} />
+      <Route path="/reportes" element={<RutaProtegida><ReportesPage /></RutaProtegida>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -62,7 +62,10 @@ export default function NumericInput({
 
   const handleBlur = () => {
     setFocused(false)
-    const numero = parsear(display)
+    let numero = parsear(display)
+    // Aplicar límites si están definidos
+    if (min !== undefined && numero < min) numero = min
+    if (max !== undefined && numero > max) numero = max
     onChange(numero)
     // Si quedó en 0 muestra vacío, si tiene valor formatea
     setDisplay(numero ? formatear(numero, decimals) : '')

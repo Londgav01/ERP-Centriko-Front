@@ -324,7 +324,7 @@ export default function MaterialesPage() {
                       aria-label="Categoría del material"
                     >
                       <option value="">Sin categoría</option>
-                      {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                      {categoriasOpts.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div className="form-group">

@@ -307,7 +307,7 @@ export default function ProveedoresPage() {
                       aria-label="Categoría del proveedor"
                     >
                       <option value="">Sin categoría</option>
-                      {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                      {categoriasOpts.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div className="form-group">

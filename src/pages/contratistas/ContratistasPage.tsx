@@ -321,7 +321,7 @@ export default function ContratistasPage() {
                       aria-label="Especialidad del contratista"
                     >
                       <option value="">Sin especialidad</option>
-                      {ESPECIALIDADES.map(e => <option key={e} value={e}>{e}</option>)}
+                      {especialidadesOpts.map((e: string) => <option key={e} value={e}>{e}</option>)}
                     </select>
                   </div>
                   <div className="form-group">

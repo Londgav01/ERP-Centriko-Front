@@ -5,6 +5,7 @@ import {
   BarChart3, Building2, FileText, Package, Users,
   ShoppingCart, Warehouse, DollarSign, CheckCircle2,
   LogOut, ChevronRight, Settings,
+  Download,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -17,6 +18,7 @@ interface MenuItem {
 
 const MENU: MenuItem[] = [
   { label: 'Tablero',          path: '/',               icon: <BarChart3 size={15}/>,    roles: ['ADMIN','COORDINADOR','ING_RESIDENTE','ENC_COMPRAS','ALMACENISTA','CONSULTA'] },
+  { label: 'Reportes',         path: '/reportes',       icon: <Download size={15}/>,     roles: ['ADMIN','COORDINADOR','ING_RESIDENTE'], grupo: 'General' },
   // Maestros
   { label: 'Proyectos',        path: '/proyectos',      icon: <Building2 size={15}/>,    roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
   { label: 'Edificaciones',    path: '/edificaciones',  icon: <Building2 size={15}/>,    roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
