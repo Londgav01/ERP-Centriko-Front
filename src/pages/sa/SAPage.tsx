@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   Plus, Warehouse, Loader2, AlertCircle,
   X, Eye, Trash2
@@ -43,6 +45,7 @@ const EMPTY_FORM = {
 export default function SAPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   const [lista,         setLista]         = useState<SA[]>([])
   const pag = usePagination(lista)
@@ -193,6 +196,7 @@ export default function SAPage() {
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Salidas de Almacén</h1>
@@ -200,9 +204,10 @@ export default function SAPage() {
         </div>
         {puedeCrear && (
           <button className="btn btn-primary" onClick={() => {
-            setForm(EMPTY_FORM); setItems([])
+            setForm({ ...EMPTY_FORM, proyecto_id: proyecto?.proyecto_id || '' }); setItems([])
             setStockEdif([]); setEdifModal([])
             setCapModal([]); setError(''); setShowForm(true)
+            if (proyecto?.proyecto_id) handleProyecto(proyecto.proyecto_id)
           }}>
             <Plus size={15} /> Nueva salida
           </button>

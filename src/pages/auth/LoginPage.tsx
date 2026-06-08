@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -10,20 +11,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
+  const navigate = useNavigate()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setCargando(true)
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault()
+    setCargando(true); setError('')
     try {
-      await login(email, password)
-      toast.success('Sesión iniciada correctamente')
+      const usuarioLogueado = await login(email, password)
+      if (usuarioLogueado.debe_cambiar_password) {
+        navigate('/cambiar-password')
+      } else {
+        navigate('/')
+      }
     } catch (err: any) {
-      const msg = err.response?.data?.error || 'Error al iniciar sesión'
-      setError(msg)
-    } finally {
-      setCargando(false)
-    }
+      setError(err.response?.data?.error || 'Credenciales incorrectas')
+    } finally { setCargando(false) }
   }
 
   return (

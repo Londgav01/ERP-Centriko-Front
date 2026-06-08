@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import { usePagination } from '../../hooks/usePagination'
 import Pagination from '../../components/ui/Pagination'
 import {
@@ -77,6 +79,7 @@ const EMPTY_ITEM: ItemCT = {
 export default function CTPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   const [lista,        setLista]        = useState<CT[]>([])
   const [proyectos,    setProyectos]    = useState<Proyecto[]>([])
@@ -326,6 +329,7 @@ export default function CTPage() {
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Contratos de Obra</h1>
@@ -333,9 +337,10 @@ export default function CTPage() {
         </div>
         {puedeGestionar && (
           <button className="btn btn-primary" onClick={() => {
-            setForm(EMPTY_FORM); setItems([])
+            setForm({ ...EMPTY_FORM, proyecto_id: proyecto?.proyecto_id || '' }); setItems([])
             setEdifModal([]); setCapsModal([])
             setError(''); setShowForm(true)
+            if (proyecto?.proyecto_id) handleProyecto(proyecto.proyecto_id)
           }}>
             <Plus size={15} /> Nuevo contrato
           </button>

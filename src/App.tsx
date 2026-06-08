@@ -21,13 +21,15 @@ import ANPage from './pages/an/ANPage'
 import AVPage from './pages/av/AVPage'
 import ReportesPage from './pages/reportes/ReportesPage'
 import PresupuestoPage from './pages/presupuesto/PresupuestoPage'
+import CambiarPasswordPage from './pages/auth/CambiarPasswordPage'
 
-
-
+// Actualiza RutaProtegida
 function RutaProtegida({ children }: { children: React.ReactNode }) {
   const { usuario, cargando } = useAuth()
-  if (cargando) return <div style={{ padding: 32 }}>Cargando...</div>
-  return usuario ? <>{children}</> : <Navigate to="/login" replace />
+  if (cargando) return null
+  if (!usuario) return <Navigate to="/login" />
+  if (usuario.debe_cambiar_password) return <Navigate to="/cambiar-password" />
+  return <>{children}</>
 }
 
 export default function App() {
@@ -56,6 +58,7 @@ export default function App() {
       <Route path="/actas" element={<RutaProtegida><AVPage /></RutaProtegida>} />
       <Route path="/reportes" element={<RutaProtegida><ReportesPage /></RutaProtegida>} />
       <Route path="/presupuesto" element={<RutaProtegida><PresupuestoPage /></RutaProtegida>} />
+      <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

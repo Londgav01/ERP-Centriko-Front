@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   Plus, FileText, Loader2, AlertCircle, X,
   Search, Trash2, Check, XCircle, Eye
@@ -55,6 +57,7 @@ const EMPTY_FORM = {
 export default function RSPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   const [lista,         setLista]         = useState<RS[]>([])
   const pag = usePagination(lista)
@@ -232,6 +235,7 @@ export default function RSPage() {
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Requisiciones de Materiales</h1>
@@ -239,8 +243,9 @@ export default function RSPage() {
         </div>
         {puedeCrear && (
           <button className="btn btn-primary" onClick={() => {
-            setForm(EMPTY_FORM); setItems([]); setError('')
+            setForm({ ...EMPTY_FORM, proyecto_id: proyecto?.proyecto_id || '' }); setItems([]); setError('')
             setEdifModal([]); setCapModal([]); setShowForm(true)
+            if (proyecto?.proyecto_id) handleProyecto(proyecto.proyecto_id)
           }}>
             <Plus size={15} /> Nueva requisición
           </button>

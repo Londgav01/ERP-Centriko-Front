@@ -1,0 +1,16 @@
+.alerta-proyecto {
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.alerta-proyecto-icon {
+  color: var(--color-warning);
+  flex-shrink: 0;
+}

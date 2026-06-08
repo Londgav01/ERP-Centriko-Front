@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   Plus, DollarSign, Loader2, AlertCircle,
   X, Eye, Check, XCircle
@@ -15,6 +17,7 @@ interface CTDisponible {
   ct_id: string; nombre_contratista: string
   nombre_proyecto: string; nombre_capitulo: string
   valor_contrato: number; pct_anticipo: number; estado: string
+  proyecto_id?: string
 }
 
 interface AN {
@@ -44,6 +47,7 @@ const EMPTY_FORM = { ct_id: '', monto_anticipo: 0, pct_anticipo: 0, notas: '' }
 export default function ANPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   const [lista,        setLista]        = useState<AN[]>([])
   const pag = usePagination(lista)
@@ -61,6 +65,10 @@ export default function ANPage() {
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
 
+  const ctDisponiblesActivos = proyecto?.proyecto_id
+    ? ctDisponibles.filter(ct => ct.proyecto_id ? ct.proyecto_id === proyecto.proyecto_id : ct.nombre_proyecto === proyecto.nombre)
+    : []
+
   useEffect(() => {
     Promise.all([
       api.get('/api/an'),
@@ -72,9 +80,15 @@ export default function ANPage() {
     }).finally(() => setCargandoPagina(false))
   }, [])
 
+  useEffect(() => {
+    if (proyecto?.proyecto_id) cargarLista()
+    else { setLista([]); pag.reset() }
+  }, [proyecto?.proyecto_id])
+
   const cargarLista = async (estado = filtroEstado) => {
     const params = new URLSearchParams()
     if (estado) params.append('estado', estado)
+    if (proyecto?.proyecto_id) params.append('proyecto_id', proyecto.proyecto_id)
     const res = await api.get(`/api/an?${params}`)
     setLista(res.data.data)
     pag.reset()
@@ -157,16 +171,18 @@ export default function ANPage() {
   }
 
   const puedeGestionar = ['ADMIN','COORDINADOR'].includes(usuario?.rol || '')
+  const puedeGestionarConProyecto = puedeGestionar && !!proyecto?.proyecto_id
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Anticipos</h1>
           <p className="page-subtitle">{lista.length} anticipo{lista.length !== 1 ? 's' : ''}</p>
         </div>
         {puedeGestionar && (
-          <button className="btn btn-primary" onClick={() => {
+          <button className="btn btn-primary" disabled={!puedeGestionarConProyecto} onClick={() => {
             setForm(EMPTY_FORM); setCtSel(null); setError(''); setShowForm(true)
           }}>
             <Plus size={15} /> Nuevo anticipo
@@ -283,13 +299,13 @@ export default function ANPage() {
                   <select id="an-ct" className="form-select" value={form.ct_id}
                     onChange={e => handleCT(e.target.value)} required aria-label="Contrato">
                     <option value="">Selecciona un contrato...</option>
-                    {ctDisponibles.map(ct => (
+                    {ctDisponiblesActivos.map(ct => (
                       <option key={ct.ct_id} value={ct.ct_id}>
                         {ct.ct_id} — {ct.nombre_contratista} | {ct.nombre_proyecto} / {ct.nombre_capitulo} | {fmtCOP(ct.valor_contrato)}
                       </option>
                     ))}
                   </select>
-                  {ctDisponibles.length === 0 && (
+                  {ctDisponiblesActivos.length === 0 && (
                     <span className="form-hint" style={{ color: 'var(--color-warning)' }}>
                       No hay contratos disponibles para registrar anticipos
                     </span>

@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import { usePagination } from '../../hooks/usePagination'
 import Pagination from '../../components/ui/Pagination'
 import {
@@ -16,6 +18,7 @@ interface CTDisponible {
   nombre_proyecto: string; nombre_capitulo: string
   valor_contrato: number; pct_anticipo: number
   valor_ejecutado_ct: number
+  proyecto_id?: string
 }
 
 interface ItemCT {
@@ -65,6 +68,7 @@ const EMPTY_FORM = {
 export default function AVPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   const [lista,        setLista]        = useState<AV[]>([])
   const [ctDisponibles, setCtDisponibles] = useState<CTDisponible[]>([])
@@ -86,6 +90,10 @@ export default function AVPage() {
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
   const pag = usePagination(lista)
+
+  const ctDisponiblesActivos = proyecto?.proyecto_id
+    ? ctDisponibles.filter(ct => ct.proyecto_id === proyecto.proyecto_id)
+    : ctDisponibles
 
   useEffect(() => {
     Promise.all([
@@ -249,16 +257,18 @@ export default function AVPage() {
 
   const puedeCrear   = ['ADMIN','COORDINADOR','ING_RESIDENTE'].includes(usuario?.rol || '')
   const puedeAprobar = ['ADMIN','COORDINADOR'].includes(usuario?.rol || '')
+  const puedeCrearConProyecto = puedeCrear && !!proyecto?.proyecto_id
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Actas de Avance</h1>
           <p className="page-subtitle">{lista.length} acta{lista.length !== 1 ? 's' : ''}</p>
         </div>
         {puedeCrear && (
-          <button className="btn btn-primary" onClick={() => {
+          <button className="btn btn-primary" disabled={!puedeCrearConProyecto} onClick={() => {
             setForm(EMPTY_FORM); setCtSel(null)
             setAnticipo(null); setItemsCT([])
             setError(''); setShowForm(true)
@@ -376,7 +386,7 @@ export default function AVPage() {
                   <select id="av-ct" className="form-select" value={form.ct_id}
                     onChange={e => handleCT(e.target.value)} required aria-label="Contrato">
                     <option value="">Selecciona un contrato...</option>
-                    {ctDisponibles.map(ct => (
+                    {ctDisponiblesActivos.map(ct => (
                       <option key={ct.ct_id} value={ct.ct_id}>
                         {ct.ct_id} — {ct.nombre_contratista} | {ct.nombre_proyecto}
                       </option>

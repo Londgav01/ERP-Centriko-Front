@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   ChevronRight, ChevronDown, Plus, Pencil,
   Trash2, Loader2, AlertCircle, X, Layers,
@@ -12,7 +14,6 @@ import NumericInput from '../../components/ui/NumericInput'
 import './PresupuestoPage.css'
 
 // ── Tipos ────────────────────────────────────────────────
-interface Proyecto    { proyecto_id: string; nombre: string }
 interface Edificacion { edificio_id: string; nombre: string; proyecto_id: string }
 
 interface Capitulo {
@@ -73,12 +74,10 @@ const UNIDADES_CONSTRUCCION = [
 export default function PresupuestoPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   // ── Datos maestros ──────────────────────────────────────
-  const [proyectos,     setProyectos]     = useState<Proyecto[]>([])
-  const [edificaciones, setEdificaciones] = useState<Edificacion[]>([])
   const [edifFilt,      setEdifFilt]      = useState<Edificacion[]>([])
-  const [filtProy,      setFiltProy]      = useState('')
   const [filtEdif,      setFiltEdif]      = useState('')
 
   // ── Datos del árbol ─────────────────────────────────────
@@ -104,39 +103,49 @@ export default function PresupuestoPage() {
 
   // ── Carga inicial ───────────────────────────────────────
   useEffect(() => {
-    Promise.all([
-      api.get('/api/proyectos'),
-      api.get('/api/edificaciones'),
-    ]).then(([rP, rE]) => {
-      setProyectos(rP.data.data)
-      setEdificaciones(rE.data.data)
-    })
-  }, [])
+    if (!proyecto?.proyecto_id) {
+      setEdifFilt([])
+      setFiltEdif('')
+      setCapitulos([])
+      setSubCaps({})
+      setActs({})
+      return
+    }
+
+    api.get(`/api/edificaciones?proyecto_id=${proyecto.proyecto_id}`)
+      .then(res => {
+        const edifs = res.data.data
+        setEdifFilt(edifs)
+
+        if (edifs.length === 1) {
+          setFiltEdif(edifs[0].edificio_id)
+          cargarCapitulos(edifs[0].edificio_id)
+        } else {
+          setFiltEdif('')
+          setCapitulos([])
+          setSubCaps({})
+          setActs({})
+        }
+      })
+  }, [proyecto?.proyecto_id])
 
   // ── Cargar capítulos ────────────────────────────────────
-  const cargarCapitulos = async (proy = filtProy, edif = filtEdif) => {
-    if (!proy) { setCapitulos([]); return }
+  const cargarCapitulos = async (edif = filtEdif) => {
+    if (!proyecto?.proyecto_id || !edif) { setCapitulos([]); return }
     setCargando(true)
     try {
       const params = new URLSearchParams()
-      params.append('proyecto_id', proy)
-      if (edif) params.append('edificio_id', edif)
+      params.append('proyecto_id', proyecto.proyecto_id)
+      params.append('edificio_id', edif)
       const res = await api.get(`/api/capitulos?${params}`)
       setCapitulos(res.data.data)
       setSubCaps({}); setActs({})
     } finally { setCargando(false) }
   }
 
-  const handleProy = (proyId: string) => {
-    setFiltProy(proyId); setFiltEdif('')
-    setEdifFilt(edificaciones.filter(e => e.proyecto_id === proyId))
-    cargarCapitulos(proyId, '')
-    setExpanded({})
-  }
-
   const handleEdif = (edifId: string) => {
     setFiltEdif(edifId)
-    cargarCapitulos(filtProy, edifId)
+    cargarCapitulos(edifId)
     setExpanded({})
   }
 
@@ -194,12 +203,12 @@ export default function PresupuestoPage() {
   try {
     if (modalCap?.modo === 'crear') {
       await api.post('/api/capitulos', {
-        codigo:          formCap.codigo,
-        nombre_capitulo: formCap.nombre_capitulo,
-        notas:           formCap.notas,
-        edificio_id:     filtEdif,   // ← viene del filtro
-        proyecto_id:     filtProy,   // ← viene del filtro
-      })
+          codigo:          formCap.codigo,
+          nombre_capitulo: formCap.nombre_capitulo,
+          notas:           formCap.notas,
+          edificio_id:     filtEdif,
+          proyecto_id:     proyecto?.proyecto_id || '',
+        })
       toast.success('Capítulo creado')
     } else {
       await api.put(`/api/capitulos/${modalCap?.data?.capitulo_id}`, {
@@ -318,6 +327,7 @@ export default function PresupuestoPage() {
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Presupuesto de Obra</h1>
@@ -339,29 +349,24 @@ export default function PresupuestoPage() {
 
       {/* Filtros */}
       <div className="page-filters presupuesto-page-filters">
-        <label className="sr-only" htmlFor="presupuesto-proyecto">Proyecto</label>
-        <select id="presupuesto-proyecto" className="form-select presupuesto-filter-proyecto" value={filtProy}
-          onChange={e => handleProy(e.target.value)}
-          aria-label="Proyecto">
-          <option value="">Selecciona un proyecto...</option>
-          {proyectos.map(p => (
-            <option key={p.proyecto_id} value={p.proyecto_id}>
-              {p.proyecto_id} — {p.nombre}
-            </option>
-          ))}
-        </select>
-
         <label className="sr-only" htmlFor="presupuesto-edificacion">Edificación</label>
         <select id="presupuesto-edificacion" className="form-select presupuesto-filter-edificacion" value={filtEdif}
           onChange={e => handleEdif(e.target.value)}
-          disabled={!filtProy}
+          disabled={!proyecto?.proyecto_id}
           aria-label="Edificación">
-          <option value="">Todas las edificaciones</option>
+          <option value="">— Selecciona una edificación —</option>
           {edifFilt.map(e => (
             <option key={e.edificio_id} value={e.edificio_id}>{e.nombre}</option>
           ))}
         </select>
       </div>
+
+      {proyecto?.proyecto_id && !filtEdif && (
+        <div className="alert alert-info">
+          <AlertCircle size={15} />
+          <span>Selecciona una edificación para ver su presupuesto</span>
+        </div>
+      )}
 
       {/* KPIs resumen */}
       {capitulos.length > 0 && (
@@ -381,14 +386,14 @@ export default function PresupuestoPage() {
       )}
 
       {/* Estado vacío */}
-      {!filtProy && (
+      {!proyecto?.proyecto_id && (
         <div className="presupuesto-empty-state">
           <Layers size={40} className="presupuesto-empty-icon" />
           <p className="presupuesto-empty-text">Selecciona un proyecto para ver el presupuesto</p>
         </div>
       )}
 
-      {filtProy && cargando && (
+      {proyecto?.proyecto_id && cargando && (
         <div className="page-loading"><Loader2 size={20} className="spinner" /><span>Cargando...</span></div>
       )}
 
@@ -617,10 +622,10 @@ export default function PresupuestoPage() {
       )}
 
       {/* Sin capítulos */}
-      {!cargando && filtProy && capitulos.length === 0 && (
+      {!cargando && proyecto?.proyecto_id && capitulos.length === 0 && (
         <div className="presupuesto-empty-state presupuesto-empty-state--compact">
           <Layers size={36} className="presupuesto-empty-icon" />
-          <p className="presupuesto-empty-text">No hay capítulos — selecciona una edificación y crea el primero</p>
+          <p className="presupuesto-empty-text">No hay capítulos — selecciona una edificación para verlos o crear el primero</p>
         </div>
       )}
 

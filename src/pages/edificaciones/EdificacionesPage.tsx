@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import { Plus, Pencil, Building2, Loader2, AlertCircle, X } from 'lucide-react'
 import './EdificacionesPage.css'
 import { usePagination } from '../../hooks/usePagination'
@@ -25,10 +27,10 @@ const BADGE: Record<string, string> = {
 
 export default function EdificacionesPage() {
   const { toast } = useToast()
+  const { proyecto } = useProyecto()
   const [edificaciones, setEdificaciones] = useState<Edificacion[]>([])
   const pag = usePagination(edificaciones)
   const [proyectos, setProyectos] = useState<Proyecto[]>([])
-  const [filtroProyecto, setFiltroProyecto] = useState('')
   const [form, setForm] = useState(EMPTY)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -41,7 +43,7 @@ export default function EdificacionesPage() {
     setProyectos(res.data.data)
   }
 
-  const cargarEdificaciones = async (proyectoId = '') => {
+  const cargarEdificaciones = async (proyectoId = proyecto?.proyecto_id || '') => {
     const params = proyectoId ? `?proyecto_id=${proyectoId}` : ''
     const res = await api.get(`/api/edificaciones${params}`)
     setEdificaciones(res.data.data)
@@ -54,10 +56,15 @@ export default function EdificacionesPage() {
     cargarEdificaciones()
   }, [])
 
-  const handleFiltro = (proyectoId: string) => {
-    setFiltroProyecto(proyectoId)
-    cargarEdificaciones(proyectoId)
-  }
+  useEffect(() => {
+    if (proyecto?.proyecto_id) {
+      cargarEdificaciones(proyecto.proyecto_id)
+    } else {
+      setEdificaciones([])
+      pag.reset()
+      setCargandoPagina(false)
+    }
+  }, [proyecto?.proyecto_id])
 
   const set = (key: string, value: any) => setForm(s => ({ ...s, [key]: value }))
 
@@ -90,7 +97,7 @@ export default function EdificacionesPage() {
         toast.success('Edificación creada correctamente')
       }
       setShowForm(false)
-      cargarEdificaciones(filtroProyecto)
+      cargarEdificaciones(proyecto?.proyecto_id || '')
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Error al guardar'
       setError(msg); toast.error(msg)
@@ -99,6 +106,7 @@ export default function EdificacionesPage() {
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Edificaciones</h1>
@@ -109,17 +117,6 @@ export default function EdificacionesPage() {
         <button className="btn btn-primary" onClick={abrirNuevo}>
           <Plus size={15} /> Nueva edificación
         </button>
-      </div>
-
-      {/* Filtro por proyecto */}
-      <div className="filter-row">
-        <select className="form-select filter-select" title="Filtrar por proyecto" aria-label="Filtrar por proyecto"
-          value={filtroProyecto} onChange={e => handleFiltro(e.target.value)}>
-          <option value="">Todos los proyectos</option>
-          {proyectos.map(p => (
-            <option key={p.proyecto_id} value={p.proyecto_id}>{p.proyecto_id} — {p.nombre}</option>
-          ))}
-        </select>
       </div>
 
       {/* Tabla */}

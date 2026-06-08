@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   Plus, ShoppingCart, Loader2, AlertCircle,
   X, Eye, Check, XCircle
@@ -16,6 +18,7 @@ interface CZDisponible {
   nombre_proyecto: string; nombre_capitulo: string
   nombre_edificio: string; condiciones_pago: string
   valor_total: number; capitulo_id: string
+  proyecto_id?: string
 }
 
 interface OC {
@@ -61,6 +64,7 @@ const EMPTY_FORM = {
 export default function OCPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   const [lista,          setLista]          = useState<OC[]>([])
   const pag = usePagination(lista)
@@ -82,6 +86,10 @@ export default function OCPage() {
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
 
+  const czDisponiblesActivos = proyecto?.proyecto_id
+    ? czDisponibles.filter(cz => cz.proyecto_id ? cz.proyecto_id === proyecto.proyecto_id : cz.nombre_proyecto === proyecto.nombre)
+    : []
+
   useEffect(() => {
     Promise.all([
       api.get('/api/oc'),
@@ -93,9 +101,15 @@ export default function OCPage() {
     }).finally(() => setCargandoPagina(false))
   }, [])
 
+  useEffect(() => {
+    if (proyecto?.proyecto_id) cargarLista()
+    else { setLista([]); pag.reset() }
+  }, [proyecto?.proyecto_id])
+
   const cargarLista = async (estado = filtroEstado) => {
     const params = new URLSearchParams()
     if (estado) params.append('estado', estado)
+    if (proyecto?.proyecto_id) params.append('proyecto_id', proyecto.proyecto_id)
     const res = await api.get(`/api/oc?${params}`)
     setLista(res.data.data)
     pag.reset()
@@ -171,16 +185,18 @@ export default function OCPage() {
 
   const puedeGestionar = ['ADMIN','COORDINADOR','ENC_COMPRAS'].includes(usuario?.rol || '')
   const puedeAprobar   = ['ADMIN','COORDINADOR'].includes(usuario?.rol || '')
+  const puedeGestionarConProyecto = puedeGestionar && !!proyecto?.proyecto_id
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Órdenes de Compra</h1>
           <p className="page-subtitle">{lista.length} orden{lista.length !== 1 ? 'es' : ''}</p>
         </div>
         {puedeGestionar && (
-          <button className="btn btn-primary" onClick={() => {
+          <button className="btn btn-primary" disabled={!puedeGestionarConProyecto} onClick={() => {
             setForm(EMPTY_FORM); setCzSel(null)
             setItemsCZ([]); setError(''); setShowForm(true)
           }}>
@@ -288,13 +304,13 @@ export default function OCPage() {
                   <select id="oc-cz" className="form-select" value={form.cz_id}
                     onChange={e => handleCZ(e.target.value)} required aria-label="Cotización">
                     <option value="">Selecciona una cotización ganadora...</option>
-                    {czDisponibles.map(cz => (
+                    {czDisponiblesActivos.map(cz => (
                       <option key={cz.cz_id} value={cz.cz_id}>
                         {cz.cz_id} — {cz.nombre_proveedor} | {cz.nombre_proyecto} / {cz.nombre_capitulo} | {fmtCOP(cz.valor_total)}
                       </option>
                     ))}
                   </select>
-                  {czDisponibles.length === 0 && (
+                  {czDisponiblesActivos.length === 0 && (
                     <span className="form-hint" style={{ color: 'var(--color-warning)' }}>
                       No hay cotizaciones ganadoras disponibles. Selecciona una CZ ganadora primero.
                     </span>

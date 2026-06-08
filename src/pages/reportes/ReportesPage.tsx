@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { exportarCSV } from '../../utils/exportarCSV'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   Download, Loader2, FileText, BarChart3,
   Building2, Layers, TrendingUp, Calendar
@@ -76,6 +78,7 @@ const COLS_MONEDA = new Set([
 
 export default function ReportesPage() {
   const { toast } = useToast()
+  const { proyecto } = useProyecto()
 
   const [proyectos,    setProyectos]    = useState<Proyecto[]>([])
   const [edificaciones,setEdificaciones]= useState<Edificacion[]>([])
@@ -101,6 +104,12 @@ export default function ReportesPage() {
       setEdificaciones(rE.data.data)
     }).finally(() => setCargandoInit(false))
   }, [])
+
+  useEffect(() => {
+    if (proyecto?.proyecto_id) {
+      handleProyecto(proyecto.proyecto_id)
+    }
+  }, [proyecto?.proyecto_id])
 
   const reporteActual = REPORTES.find(r => r.id === tipoSel)
 
@@ -153,6 +162,7 @@ export default function ReportesPage() {
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Reportes</h1>

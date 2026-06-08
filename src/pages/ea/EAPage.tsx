@@ -3,6 +3,8 @@ import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   Plus, Warehouse, Loader2, AlertCircle,
   X, Eye
@@ -16,6 +18,7 @@ interface OcDisponible {
   nombre_proyecto: string; nombre_edificio: string
   edificio_id: string; valor_total: number
   fecha_entrega_esperada: string
+  proyecto_id?: string
 }
 
 interface ItemEA {
@@ -52,6 +55,7 @@ const EMPTY_FORM = { oc_id: '', nro_remision: '', nro_factura: '', notas: '' }
 export default function EAPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
+  const { proyecto } = useProyecto()
 
   const [lista,         setLista]         = useState<EA[]>([])
   const pag = usePagination(lista)
@@ -72,6 +76,10 @@ export default function EAPage() {
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
 
+  const ocDisponiblesActivos = proyecto?.proyecto_id
+    ? ocDisponibles.filter(oc => oc.proyecto_id ? oc.proyecto_id === proyecto.proyecto_id : oc.nombre_proyecto === proyecto.nombre)
+    : []
+
   useEffect(() => {
     Promise.all([
       api.get('/api/ea'),
@@ -83,8 +91,15 @@ export default function EAPage() {
     }).finally(() => setCargandoPagina(false))
   }, [])
 
+  useEffect(() => {
+    if (proyecto?.proyecto_id) cargarLista()
+    else { setLista([]); pag.reset() }
+  }, [proyecto?.proyecto_id])
+
   const cargarLista = async () => {
-    const res = await api.get('/api/ea')
+    const params = new URLSearchParams()
+    if (proyecto?.proyecto_id) params.append('proyecto_id', proyecto.proyecto_id)
+    const res = await api.get(`/api/ea?${params}`)
     setLista(res.data.data)
     pag.reset()
   }
@@ -164,16 +179,18 @@ export default function EAPage() {
   }
 
   const puedeCrear = ['ADMIN','COORDINADOR','ALMACENISTA'].includes(usuario?.rol || '')
+  const puedeCrearConProyecto = puedeCrear && !!proyecto?.proyecto_id
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Entradas de Almacén</h1>
           <p className="page-subtitle">{lista.length} entrada{lista.length !== 1 ? 's' : ''} registrada{lista.length !== 1 ? 's' : ''}</p>
         </div>
         {puedeCrear && (
-          <button className="btn btn-primary" onClick={() => {
+          <button className="btn btn-primary" disabled={!puedeCrearConProyecto} onClick={() => {
             setForm(EMPTY_FORM); setOcSel(null)
             setItems([]); setError(''); setShowForm(true)
           }}>
@@ -262,14 +279,14 @@ export default function EAPage() {
                   <select id="ea-oc" className="form-select" value={form.oc_id}
                     onChange={e => handleOC(e.target.value)} required aria-label="Orden de compra">
                     <option value="">Selecciona una OC...</option>
-                    {ocDisponibles.map(oc => (
+                    {ocDisponiblesActivos.map(oc => (
                       <option key={oc.oc_id} value={oc.oc_id}>
                         {oc.oc_id} — {oc.nombre_proveedor} | {oc.nombre_proyecto} |
                         {oc.estado === 'RECIBIDA_PARCIAL' ? ' (Parcial)' : ''}
                       </option>
                     ))}
                   </select>
-                  {ocDisponibles.length === 0 && (
+                  {ocDisponiblesActivos.length === 0 && (
                     <span className="form-hint" style={{ color: 'var(--color-warning)' }}>
                       No hay OC aprobadas o con pendientes de recepción
                     </span>

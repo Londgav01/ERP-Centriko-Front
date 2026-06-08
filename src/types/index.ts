@@ -5,6 +5,7 @@ export interface Usuario {
   email: string
   nombre: string
   rol: Rol
+  debe_cambiar_password: boolean 
 }
 
 export interface AuthState {

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
+import { useProyecto } from '../../context/ProyectoContext'
+import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
@@ -21,7 +23,6 @@ interface Capitulo {
   edificio_id: string; proyecto_id: string; estado: string
 }
 
-interface Proyecto    { proyecto_id: string; nombre: string }
 interface Edificacion { edificio_id: string; nombre: string; proyecto_id: string }
 
 const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', {
@@ -61,8 +62,8 @@ const badgeEficiencia = (idx: number) => {
 }
 
 export default function DashboardPage() {
+  const { proyecto } = useProyecto()
   const [capitulos,      setCapitulos]     = useState<Capitulo[]>([])
-  const [proyectos,      setProyectos]     = useState<Proyecto[]>([])
   const [edificaciones,  setEdificaciones] = useState<Edificacion[]>([])
   const [edifFiltradas,  setEdifFiltradas] = useState<Edificacion[]>([])
   const [filtroProyecto, setFiltroProyecto]= useState('')
@@ -70,7 +71,7 @@ export default function DashboardPage() {
   const [cargando,       setCargando]      = useState(true)
   const [vistaGrafica,   setVistaGrafica]  = useState<'barras' | 'comparativo'>('comparativo')
 
-  const cargar = async (proy = filtroProyecto, edif = filtroEdificio) => {
+  const cargar = async (proy = proyecto?.proyecto_id || filtroProyecto, edif = filtroEdificio) => {
     setCargando(true)
     try {
       const params = new URLSearchParams()
@@ -84,21 +85,26 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([
       api.get('/api/tablero'),
-      api.get('/api/proyectos'),
       api.get('/api/edificaciones'),
-    ]).then(([rT, rP, rE]) => {
+    ]).then(([rT, rE]) => {
       setCapitulos(rT.data.data)
-      setProyectos(rP.data.data)
       setEdificaciones(rE.data.data)
     }).finally(() => setCargando(false))
   }, [])
 
-  const handleProyecto = (proyId: string) => {
-    setFiltroProyecto(proyId)
-    setFiltroEdificio('')
-    setEdifFiltradas(edificaciones.filter(e => e.proyecto_id === proyId))
-    cargar(proyId, '')
-  }
+  useEffect(() => {
+    if (proyecto?.proyecto_id) {
+      setFiltroProyecto(proyecto.proyecto_id)
+      setFiltroEdificio('')
+      setEdifFiltradas(edificaciones.filter(e => e.proyecto_id === proyecto.proyecto_id))
+      cargar(proyecto.proyecto_id, '')
+    } else {
+      setFiltroProyecto('')
+      setFiltroEdificio('')
+      setEdifFiltradas([])
+      setCapitulos([])
+    }
+  }, [proyecto?.proyecto_id])
 
   // ── KPIs globales ──────────────────────────────────────────
   const totalPresupuestado  = capitulos.reduce((s, c) => s + c.valor_presupuestado, 0)
@@ -141,6 +147,7 @@ export default function DashboardPage() {
 
   return (
     <MainLayout>
+      <AlertaProyecto />
       <div className="page-header">
         <div>
           <h1 className="page-title">Tablero de Control</h1>
@@ -153,20 +160,9 @@ export default function DashboardPage() {
 
       {/* Filtros */}
       <div className="page-filters" style={{ marginBottom: 24 }}>
-        <select className="form-select" value={filtroProyecto}
-          onChange={e => handleProyecto(e.target.value)}
-          aria-label="Filtrar por proyecto" style={{ width: 260 }}>
-          <option value="">Todos los proyectos</option>
-          {proyectos.map(p => (
-            <option key={p.proyecto_id} value={p.proyecto_id}>
-              {p.proyecto_id} — {p.nombre}
-            </option>
-          ))}
-        </select>
-
         <select className="form-select" value={filtroEdificio}
           onChange={e => { setFiltroEdificio(e.target.value); cargar(filtroProyecto, e.target.value) }}
-          disabled={!filtroProyecto}
+          disabled={!proyecto?.proyecto_id}
           aria-label="Filtrar por edificación" style={{ width: 220 }}>
           <option value="">Todas las edificaciones</option>
           {edifFiltradas.map(e => (
