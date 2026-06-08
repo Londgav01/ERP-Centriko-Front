@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import './NumericInput.css'
 
 interface NumericInputProps {
   id?: string
@@ -71,17 +72,10 @@ export default function NumericInput({
     setDisplay(numero ? formatear(numero, decimals) : '')
   }
 
-  const paddingLeft  = prefix ? 24 : 10
-  const paddingRight = suffix ? 32 : 10
-
   return (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+    <div className="numeric-input-shell">
       {prefix && (
-        <span style={{
-          position: 'absolute', left: 10, fontSize: 13, lineHeight: 1,
-          color: 'var(--color-text-muted)', pointerEvents: 'none', userSelect: 'none',
-          zIndex: 1,
-        }}>
+        <span className="numeric-input-prefix">
           {prefix}
         </span>
       )}
@@ -90,8 +84,7 @@ export default function NumericInput({
         id={id}
         type="text"
         inputMode="numeric"
-        className={`form-input ${className}`}
-        style={{ paddingLeft, paddingRight, textAlign: 'right' }}
+        className={`form-input numeric-input-field ${prefix ? 'numeric-input-field--prefix' : ''} ${suffix ? 'numeric-input-field--suffix' : ''} ${className}`}
         value={display}
         onChange={handleChange}
         onFocus={handleFocus}
@@ -102,10 +95,7 @@ export default function NumericInput({
       />
 
       {suffix && (
-        <span style={{
-          position: 'absolute', right: 10, fontSize: 12, lineHeight: 1,
-          color: 'var(--color-text-muted)', pointerEvents: 'none', userSelect: 'none',
-        }}>
+        <span className="numeric-input-suffix">
           {suffix}
         </span>
       )}

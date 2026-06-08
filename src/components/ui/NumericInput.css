@@ -1,0 +1,37 @@
+.numeric-input-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.numeric-input-prefix,
+.numeric-input-suffix {
+  position: absolute;
+  line-height: 1;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+}
+
+.numeric-input-prefix {
+  left: 10px;
+  font-size: 13px;
+}
+
+.numeric-input-suffix {
+  right: 10px;
+  font-size: 12px;
+}
+
+.numeric-input-field {
+  text-align: right;
+}
+
+.numeric-input-field--prefix {
+  padding-left: 24px;
+}
+
+.numeric-input-field--suffix {
+  padding-right: 32px;
+}

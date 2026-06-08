@@ -4,7 +4,7 @@ import type {Rol} from '../../types'
 import {
   BarChart3, Building2, FileText, Package, Users,
   ShoppingCart, Warehouse, DollarSign, CheckCircle2,
-  LogOut, ChevronRight, Settings,
+  LogOut, ChevronRight, Settings, Layers,
   Download,
 } from 'lucide-react'
 
@@ -22,7 +22,7 @@ const MENU: MenuItem[] = [
   // Maestros
   { label: 'Proyectos',        path: '/proyectos',      icon: <Building2 size={15}/>,    roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
   { label: 'Edificaciones',    path: '/edificaciones',  icon: <Building2 size={15}/>,    roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
-  { label: 'Capítulos',        path: '/capitulos',      icon: <FileText size={15}/>,     roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
+  { label: 'Capítulos', path: '/presupuesto', icon: <Layers size={15}/>, roles: ['ADMIN','COORDINADOR','ING_RESIDENTE','CONSULTA'], grupo: 'Maestros' },
   { label: 'Materiales',       path: '/materiales',     icon: <Package size={15}/>,      roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
   { label: 'Proveedores',      path: '/proveedores',    icon: <Users size={15}/>,        roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
   { label: 'Contratistas',     path: '/contratistas',   icon: <Users size={15}/>,        roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },

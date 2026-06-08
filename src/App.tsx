@@ -20,6 +20,7 @@ import CTPage from './pages/ct/CTPage'
 import ANPage from './pages/an/ANPage'
 import AVPage from './pages/av/AVPage'
 import ReportesPage from './pages/reportes/ReportesPage'
+import PresupuestoPage from './pages/presupuesto/PresupuestoPage'
 
 
 
@@ -54,6 +55,7 @@ export default function App() {
       <Route path="/anticipos" element={<RutaProtegida><ANPage /></RutaProtegida>} />
       <Route path="/actas" element={<RutaProtegida><AVPage /></RutaProtegida>} />
       <Route path="/reportes" element={<RutaProtegida><ReportesPage /></RutaProtegida>} />
+      <Route path="/presupuesto" element={<RutaProtegida><PresupuestoPage /></RutaProtegida>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
