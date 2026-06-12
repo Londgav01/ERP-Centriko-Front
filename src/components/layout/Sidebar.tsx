@@ -1,6 +1,6 @@
 import { useAuth } from '../../context/AuthContext'
 import { useNavigate, useLocation } from 'react-router-dom'
-import type {Rol} from '../../types'
+import type { Rol } from '../../types'
 import {
   BarChart3, Building2, FileText, Package, Users,
   ShoppingCart, Warehouse, DollarSign, CheckCircle2,
@@ -17,28 +17,29 @@ interface MenuItem {
 }
 
 const MENU: MenuItem[] = [
-  { label: 'Tablero',          path: '/',               icon: <BarChart3 size={15}/>,    roles: ['ADMIN','COORDINADOR','ING_RESIDENTE','ENC_COMPRAS','ALMACENISTA','CONSULTA'] },
-  { label: 'Reportes',         path: '/reportes',       icon: <Download size={15}/>,     roles: ['ADMIN','COORDINADOR','ING_RESIDENTE'], grupo: 'General' },
+  { label: 'Tablero', path: '/', icon: <BarChart3 size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ING_RESIDENTE', 'ENC_COMPRAS', 'ALMACENISTA', 'CONSULTA'] },
+  { label: 'Reportes', path: '/reportes', icon: <Download size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ING_RESIDENTE'], grupo: 'General' },
   // Maestros
-  { label: 'Proyectos',        path: '/proyectos',      icon: <Building2 size={15}/>,    roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
-  { label: 'Edificaciones',    path: '/edificaciones',  icon: <Building2 size={15}/>,    roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
-  { label: 'Capítulos', path: '/presupuesto', icon: <Layers size={15}/>, roles: ['ADMIN','COORDINADOR','ING_RESIDENTE','CONSULTA'], grupo: 'Maestros' },
-  { label: 'Materiales',       path: '/materiales',     icon: <Package size={15}/>,      roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
-  { label: 'Proveedores',      path: '/proveedores',    icon: <Users size={15}/>,        roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
-  { label: 'Contratistas',     path: '/contratistas',   icon: <Users size={15}/>,        roles: ['ADMIN','COORDINADOR'], grupo: 'Maestros' },
-  { label: 'Usuarios',         path: '/usuarios',       icon: <Users size={15}/>,        roles: ['ADMIN'],               grupo: 'Maestros' },
-  { label: 'Categorías',       path: '/categorias',     icon: <Settings size={15}/>,     roles: ['ADMIN'],               grupo: 'Maestros' },
+  { label: 'Proyectos', path: '/proyectos', icon: <Building2 size={15} />, roles: ['ADMIN', 'COORDINADOR'], grupo: 'Maestros' },
+  { label: 'Edificaciones', path: '/edificaciones', icon: <Building2 size={15} />, roles: ['ADMIN', 'COORDINADOR'], grupo: 'Maestros' },
+  { label: 'Capítulos', path: '/presupuesto', icon: <Layers size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ING_RESIDENTE', 'CONSULTA'], grupo: 'Maestros' },
+  { label: 'Materiales', path: '/materiales', icon: <Package size={15} />, roles: ['ADMIN', 'COORDINADOR'], grupo: 'Maestros' },
+  { label: 'Proveedores', path: '/proveedores', icon: <Users size={15} />, roles: ['ADMIN', 'COORDINADOR'], grupo: 'Maestros' },
+  { label: 'Contratistas', path: '/contratistas', icon: <Users size={15} />, roles: ['ADMIN', 'COORDINADOR'], grupo: 'Maestros' },
+  { label: 'Usuarios', path: '/usuarios', icon: <Users size={15} />, roles: ['ADMIN'], grupo: 'Maestros' },
+  { label: 'Categorías', path: '/categorias', icon: <Settings size={15} />, roles: ['ADMIN'], grupo: 'Maestros' },
   // Materiales
-  { label: 'Requisiciones',    path: '/requisiciones',  icon: <FileText size={15}/>,     roles: ['ADMIN','COORDINADOR','ING_RESIDENTE'],               grupo: 'Materiales' },
-  { label: 'Cotizaciones',     path: '/cotizaciones',   icon: <DollarSign size={15}/>,   roles: ['ADMIN','COORDINADOR','ENC_COMPRAS'],                 grupo: 'Materiales' },
-  { label: 'Órdenes de compra',path: '/ordenes-compra', icon: <ShoppingCart size={15}/>, roles: ['ADMIN','COORDINADOR','ENC_COMPRAS'],                 grupo: 'Materiales' },
-  { label: 'Entradas almacén', path: '/entradas',       icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ALMACENISTA'],                 grupo: 'Materiales' },
-  { label: 'Inventario',       path: '/stock',          icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ING_RESIDENTE','ALMACENISTA'], grupo: 'Materiales' },
-  { label: 'Salidas almacén',  path: '/salidas',        icon: <Warehouse size={15}/>,    roles: ['ADMIN','COORDINADOR','ALMACENISTA'],                 grupo: 'Materiales' },
+  { label: 'Requisiciones', path: '/requisiciones', icon: <FileText size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ING_RESIDENTE'], grupo: 'Materiales' },
+  { label: 'Cotizaciones', path: '/cotizaciones', icon: <DollarSign size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ENC_COMPRAS'], grupo: 'Materiales' },
+  { label: 'Órdenes de compra', path: '/ordenes-compra', icon: <ShoppingCart size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ENC_COMPRAS'], grupo: 'Materiales' },
+  { label: 'Entradas almacén', path: '/entradas', icon: <Warehouse size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ALMACENISTA'], grupo: 'Materiales' },
+  { label: 'Inventario', path: '/stock', icon: <Warehouse size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ING_RESIDENTE', 'ALMACENISTA'], grupo: 'Materiales' },
+  { label: 'Salidas almacén', path: '/salidas', icon: <Warehouse size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ALMACENISTA'], grupo: 'Materiales' },
   // Contratos
-  { label: 'Contratos',        path: '/contratos',      icon: <FileText size={15}/>,     roles: ['ADMIN','COORDINADOR'], grupo: 'Contratos' },
-  { label: 'Anticipos',        path: '/anticipos',      icon: <DollarSign size={15}/>,   roles: ['ADMIN','COORDINADOR'], grupo: 'Contratos' },
-  { label: 'Actas de avance',  path: '/actas',          icon: <CheckCircle2 size={15}/>, roles: ['ADMIN','COORDINADOR','ING_RESIDENTE'], grupo: 'Contratos' },
+  { label: 'Contratos', path: '/contratos', icon: <FileText size={15} />, roles: ['ADMIN', 'COORDINADOR'], grupo: 'Contratos' },
+  { label: 'Anticipos', path: '/anticipos', icon: <DollarSign size={15} />, roles: ['ADMIN', 'COORDINADOR'], grupo: 'Contratos' },
+  { label: 'Actas de avance', path: '/actas', icon: <CheckCircle2 size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ING_RESIDENTE'], grupo: 'Contratos' },
+  { label: 'Facturación', path: '/facturas', icon: <FileText size={15} />, roles: ['ADMIN', 'COORDINADOR', 'ENC_COMPRAS'], grupo: 'Contratos'},
 ]
 
 export default function Sidebar() {
@@ -68,7 +69,7 @@ export default function Sidebar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <div style={{ width: 30, height: 30, background: 'var(--color-primary)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
             </svg>
           </div>
           <div>

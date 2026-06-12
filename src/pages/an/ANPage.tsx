@@ -12,6 +12,8 @@ import {
 import NumericInput from '../../components/ui/NumericInput'
 import { usePagination } from '../../hooks/usePagination'
 import Pagination from '../../components/ui/Pagination'
+import { useNavigate } from 'react-router-dom';
+
 
 interface CTDisponible {
   ct_id: string; nombre_contratista: string
@@ -64,6 +66,7 @@ export default function ANPage() {
   const [anDetalle,    setAnDetalle]    = useState<AN | null>(null)
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
+  const navigate = useNavigate();
 
   const ctDisponiblesActivos = proyecto?.proyecto_id
     ? ctDisponibles.filter(ct => ct.proyecto_id ? ct.proyecto_id === proyecto.proyecto_id : ct.nombre_proyecto === proyecto.nombre)
@@ -253,6 +256,12 @@ export default function ANPage() {
                     <div className="table-actions">
                       <button className="btn btn-ghost btn-sm" onClick={() => verDetalle(a.an_id)}>
                         <Eye size={13} /> Ver
+                      </button>
+                      <button className="btn btn-ghost btn-sm"
+                        style={{ color: '#6366f1', border: '1px solid #6366f1' }}
+                        onClick={() => navigate(`/contratos/${a.ct_id}`)}
+                        title="Ver contrato">
+                        CT
                       </button>
                       {puedeGestionar && a.estado === 'PENDIENTE_PAGO' && (
                         <button className="btn btn-ghost btn-sm"

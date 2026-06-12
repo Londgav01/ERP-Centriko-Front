@@ -22,6 +22,9 @@ interface Capitulo {
   valor_ejecutado: number; avance_fisico_pct: number
   total_sub_capitulos: number; total_actividades: number
   nombre_edificio: string; nombre_proyecto: string
+  avance_economico_pct: number
+  avance_fisico_calc: number
+  valor_presupuestado_calc: number
 }
 
 interface SubCapitulo {
@@ -47,15 +50,15 @@ const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', {
 const fmtCOPCorto = (v: number) => {
   if (!v) return '$ 0'
   if (v >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(1)}B`
-  if (v >= 1_000_000)     return `$${(v / 1_000_000).toFixed(1)}M`
-  if (v >= 1_000)         return `$${(v / 1_000).toFixed(0)}K`
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`
   return fmtCOP(v)
 }
 
 // ── Forms vacíos ─────────────────────────────────────────
-const EMPTY_CAP  = { codigo: '', nombre_capitulo: '', notas: '' }
-const EMPTY_SUB  = { codigo: '', nombre_sub_capitulo: '', notas: '' }
-const EMPTY_ACT  = {
+const EMPTY_CAP = { codigo: '', nombre_capitulo: '', notas: '' }
+const EMPTY_SUB = { codigo: '', nombre_sub_capitulo: '', notas: '' }
+const EMPTY_ACT = {
   codigo: '', nombre_actividad: '',
   tipo: 'DETALLADA' as 'DETALLADA' | 'GLOBAL',
   unidad: '', cantidad: 0, vr_unitario: 0, vr_total: 0, notas: ''
@@ -72,34 +75,34 @@ const UNIDADES_CONSTRUCCION = [
 ]
 
 export default function PresupuestoPage() {
-  const { toast }   = useToast()
+  const { toast } = useToast()
   const { usuario } = useAuth()
   const { proyecto } = useProyecto()
 
   // ── Datos maestros ──────────────────────────────────────
-  const [edifFilt,      setEdifFilt]      = useState<Edificacion[]>([])
-  const [filtEdif,      setFiltEdif]      = useState('')
+  const [edifFilt, setEdifFilt] = useState<Edificacion[]>([])
+  const [filtEdif, setFiltEdif] = useState('')
 
   // ── Datos del árbol ─────────────────────────────────────
-  const [capitulos,  setCapitulos]  = useState<Capitulo[]>([])
-  const [subCaps,    setSubCaps]    = useState<Record<string, SubCapitulo[]>>({})
-  const [acts,       setActs]       = useState<Record<string, Actividad[]>>({})
-  const [expanded,   setExpanded]   = useState<Record<string, boolean>>({})
-  const [cargando,   setCargando]   = useState(false)
+  const [capitulos, setCapitulos] = useState<Capitulo[]>([])
+  const [subCaps, setSubCaps] = useState<Record<string, SubCapitulo[]>>({})
+  const [acts, setActs] = useState<Record<string, Actividad[]>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [cargando, setCargando] = useState(false)
 
   // ── Modales ─────────────────────────────────────────────
-  const [modalCap,   setModalCap]   = useState<{modo: 'crear' | 'editar'; data?: Capitulo} | null>(null)
-  const [modalSub,   setModalSub]   = useState<{modo: 'crear' | 'editar'; capituloId?: string; data?: SubCapitulo} | null>(null)
-  const [modalAct,   setModalAct]   = useState<{modo: 'crear' | 'editar'; subCapId?: string; data?: Actividad} | null>(null)
+  const [modalCap, setModalCap] = useState<{ modo: 'crear' | 'editar'; data?: Capitulo } | null>(null)
+  const [modalSub, setModalSub] = useState<{ modo: 'crear' | 'editar'; capituloId?: string; data?: SubCapitulo } | null>(null)
+  const [modalAct, setModalAct] = useState<{ modo: 'crear' | 'editar'; subCapId?: string; data?: Actividad } | null>(null)
 
-  const [formCap,    setFormCap]    = useState(EMPTY_CAP)
-  const [formSub,    setFormSub]    = useState(EMPTY_SUB)
-  const [formAct,    setFormAct]    = useState(EMPTY_ACT)
-  const [error,      setError]      = useState('')
-  const [guardando,  setGuardando]  = useState(false)
+  const [formCap, setFormCap] = useState(EMPTY_CAP)
+  const [formSub, setFormSub] = useState(EMPTY_SUB)
+  const [formAct, setFormAct] = useState(EMPTY_ACT)
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
   const [unidadPersonalizada, setUnidadPersonalizada] = useState(false)
 
-  const puedeEditar = ['ADMIN','COORDINADOR'].includes(usuario?.rol || '')
+  const puedeEditar = ['ADMIN', 'COORDINADOR'].includes(usuario?.rol || '')
 
   // ── Carga inicial ───────────────────────────────────────
   useEffect(() => {
@@ -162,7 +165,7 @@ export default function PresupuestoPage() {
 
   // ── Expandir sub-cap → cargar actividades ───────────────
   const toggleSubCap = async (sub: SubCapitulo) => {
-    const key    = `sub_${sub.sub_capitulo_id}`
+    const key = `sub_${sub.sub_capitulo_id}`
     const abierto = expanded[key]
     setExpanded(s => ({ ...s, [key]: !abierto }))
 
@@ -173,16 +176,15 @@ export default function PresupuestoPage() {
   }
 
   // ── Totales globales ────────────────────────────────────
-  const totalPres  = capitulos.reduce((s, c) => s + c.valor_presupuestado, 0)
-  const totalComp  = capitulos.reduce((s, c) => s + c.valor_comprometido, 0)
-  const totalEjec  = capitulos.reduce((s, c) => s + c.valor_ejecutado, 0)
-  const avanceProm = capitulos.length > 0
-    ? capitulos.reduce((s, c) => s + c.avance_fisico_pct, 0) / capitulos.length : 0
+  const totalPres = capitulos.reduce((s, c) => s + c.valor_presupuestado, 0)
+  const totalComp = capitulos.reduce((s, c) => s + c.valor_comprometido, 0)
+  const totalEjec = capitulos.reduce((s, c) => s + c.valor_ejecutado, 0)
+
 
   // ── Helpers modales ─────────────────────────────────────
-  const setCap  = (k: string, v: any) => setFormCap(s => ({ ...s, [k]: v }))
-  const setSub  = (k: string, v: any) => setFormSub(s => ({ ...s, [k]: v }))
-  const setAct  = (k: string, v: any) => {
+  const setCap = (k: string, v: any) => setFormCap(s => ({ ...s, [k]: v }))
+  const setSub = (k: string, v: any) => setFormSub(s => ({ ...s, [k]: v }))
+  const setAct = (k: string, v: any) => {
     setFormAct(s => {
       const nuevo = { ...s, [k]: v }
       if (k === 'cantidad' || k === 'vr_unitario') {
@@ -194,40 +196,37 @@ export default function PresupuestoPage() {
 
   // ── CRUD Capítulo ───────────────────────────────────────
   const guardarCapitulo = async () => {
-  if (!formCap.codigo || !formCap.nombre_capitulo)
-    { setError('Código y nombre son requeridos'); return }
-  if (!filtEdif)
-    { setError('Selecciona una edificación primero'); return }
+    if (!formCap.codigo || !formCap.nombre_capitulo) { setError('Código y nombre son requeridos'); return }
+    if (!filtEdif) { setError('Selecciona una edificación primero'); return }
 
-  setGuardando(true); setError('')
-  try {
-    if (modalCap?.modo === 'crear') {
-      await api.post('/api/capitulos', {
-          codigo:          formCap.codigo,
+    setGuardando(true); setError('')
+    try {
+      if (modalCap?.modo === 'crear') {
+        await api.post('/api/capitulos', {
+          codigo: formCap.codigo,
           nombre_capitulo: formCap.nombre_capitulo,
-          notas:           formCap.notas,
-          edificio_id:     filtEdif,
-          proyecto_id:     proyecto?.proyecto_id || '',
+          notas: formCap.notas,
+          edificio_id: filtEdif,
+          proyecto_id: proyecto?.proyecto_id || '',
         })
-      toast.success('Capítulo creado')
-    } else {
-      await api.put(`/api/capitulos/${modalCap?.data?.capitulo_id}`, {
-        codigo:          formCap.codigo,
-        nombre_capitulo: formCap.nombre_capitulo,
-        notas:           formCap.notas,
-      })
-      toast.success('Capítulo actualizado')
-    }
-    setModalCap(null); cargarCapitulos()
-  } catch (err: any) {
-    setError(err.response?.data?.error || 'Error al guardar')
-  } finally { setGuardando(false) }
-}
+        toast.success('Capítulo creado')
+      } else {
+        await api.put(`/api/capitulos/${modalCap?.data?.capitulo_id}`, {
+          codigo: formCap.codigo,
+          nombre_capitulo: formCap.nombre_capitulo,
+          notas: formCap.notas,
+        })
+        toast.success('Capítulo actualizado')
+      }
+      setModalCap(null); cargarCapitulos()
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al guardar')
+    } finally { setGuardando(false) }
+  }
 
   // ── CRUD Sub-capítulo ───────────────────────────────────
   const guardarSubCap = async () => {
-    if (!formSub.codigo || !formSub.nombre_sub_capitulo)
-      { setError('Código y nombre son requeridos'); return }
+    if (!formSub.codigo || !formSub.nombre_sub_capitulo) { setError('Código y nombre son requeridos'); return }
 
     setGuardando(true); setError('')
     try {
@@ -254,10 +253,8 @@ export default function PresupuestoPage() {
 
   // ── CRUD Actividad ──────────────────────────────────────
   const guardarActividad = async () => {
-    if (!formAct.codigo || !formAct.nombre_actividad)
-      { setError('Código y nombre son requeridos'); return }
-    if (formAct.tipo === 'DETALLADA' && !formAct.unidad)
-      { setError('La actividad detallada requiere unidad'); return }
+    if (!formAct.codigo || !formAct.nombre_actividad) { setError('Código y nombre son requeridos'); return }
+    if (formAct.tipo === 'DETALLADA' && !formAct.unidad) { setError('La actividad detallada requiere unidad'); return }
 
     setGuardando(true); setError('')
     try {
@@ -313,17 +310,124 @@ export default function PresupuestoPage() {
   }
 
   // ── Barra de progreso inline ─────────────────────────────
-  const BarraProgreso = ({ pct, variant }: { pct: number; variant: 'light' | 'primary' }) => (
-    <div className="presupuesto-progress-row">
-      <progress
-        className={`presupuesto-progress presupuesto-progress--${variant}`}
-        value={Math.min(pct, 100)}
-        max={100}
-        aria-label={`Avance ${pct.toFixed(1)}%`}
-      />
-      <span className="presupuesto-progress-text">{pct.toFixed(1)}%</span>
+  // Componente BarraDoble - label + barra + % en UNA SOLA fila
+const BarraDoble = ({
+  fisico,
+  economico,
+  invertido = false,
+}: {
+  fisico: number;
+  economico: number;
+  invertido?: boolean;
+}) => {
+  const colorFisico =
+    fisico > 100 ? '#ef4444' : fisico > 80 ? '#22c55e' : '#60a5fa';
+  const colorEconomico =
+    economico > 100 ? '#ef4444' : economico > 80 ? '#a3e635' : '#93c5fd';
+  const textColor = invertido ? 'white' : '#334155';
+  const trackColor = invertido ? 'rgba(255,255,255,0.18)' : '#e2e8f0';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {/* Fila Físico */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            color: textColor,
+            opacity: 0.75,
+            width: 22,
+            flexShrink: 0,
+          }}
+        >
+          FÍS
+        </span>
+        <div
+          style={{
+            flex: 1,
+            height: 5,
+            background: trackColor,
+            borderRadius: 3,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              height: '100%',
+              width: `${Math.min(fisico, 100)}%`,
+              background: colorFisico,
+              borderRadius: 3,
+              transition: 'width 0.4s ease',
+            }}
+          />
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: textColor,
+            width: 38,
+            textAlign: 'right',
+            flexShrink: 0,
+          }}
+        >
+          {fisico.toFixed(1)}%
+        </span>
+      </div>
+
+      {/* Fila Económico */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            color: textColor,
+            opacity: 0.55,
+            width: 22,
+            flexShrink: 0,
+          }}
+        >
+          ECO
+        </span>
+        <div
+          style={{
+            flex: 1,
+            height: 5,
+            background: trackColor,
+            borderRadius: 3,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              height: '100%',
+              width: `${Math.min(economico, 100)}%`,
+              background: colorEconomico,
+              borderRadius: 3,
+              transition: 'width 0.4s ease',
+            }}
+          />
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: textColor,
+            opacity: 0.8,
+            width: 38,
+            textAlign: 'right',
+            flexShrink: 0,
+          }}
+        >
+          {economico.toFixed(1)}%
+        </span>
+      </div>
     </div>
-  )
+  );
+};
 
   return (
     <MainLayout>
@@ -370,16 +474,28 @@ export default function PresupuestoPage() {
 
       {/* KPIs resumen */}
       {capitulos.length > 0 && (
-        <div className="kpi-grid presupuesto-kpi-grid">
+        <div className="kpi-grid" style={{ marginBottom: 20 }}>
           {[
-            { label: 'Presupuestado', value: fmtCOP(totalPres), colorClass: 'presupuesto-kpi-value--primary' },
-            { label: 'Comprometido',  value: fmtCOP(totalComp), colorClass: 'presupuesto-kpi-value--info' },
-            { label: 'Ejecutado',     value: fmtCOP(totalEjec), colorClass: 'presupuesto-kpi-value--success' },
-            { label: 'Avance físico', value: `${avanceProm.toFixed(1)}%`, colorClass: 'presupuesto-kpi-value--primary' },
+            { label: 'Presupuestado', value: fmtCOP(totalPres), color: 'var(--color-primary)' },
+            { label: 'Comprometido',  value: fmtCOP(totalComp), color: 'var(--color-info)' },
+            { label: 'Ejecutado',     value: fmtCOP(totalEjec), color: 'var(--color-success)' },
+            {
+              label: 'Avance físico',
+              value: `${(capitulos.reduce((s, c) => s + (c.avance_fisico_calc || c.avance_fisico_pct), 0) / capitulos.length).toFixed(1)}%`,
+              color: 'var(--color-primary)',
+              sub: 'Cantidades ejecutadas',
+            },
+            {
+              label: 'Avance económico',
+              value: `${(capitulos.reduce((s, c) => s + (c.avance_economico_pct || 0), 0) / capitulos.length).toFixed(1)}%`,
+              color: 'var(--color-warning)',
+              sub: 'Presupuesto ejecutado',
+            },
           ].map(k => (
             <div key={k.label} className="kpi-card">
               <span className="kpi-label">{k.label}</span>
-              <div className={`kpi-value presupuesto-kpi-value ${k.colorClass}`}>{k.value}</div>
+              <div className="kpi-value" style={{ fontSize: 16, color: k.color }}>{k.value}</div>
+              {k.sub && <span className="td-muted" style={{ fontSize: 10 }}>{k.sub}</span>}
             </div>
           ))}
         </div>
@@ -401,15 +517,27 @@ export default function PresupuestoPage() {
       {!cargando && capitulos.length > 0 && (
         <div className="presupuesto-tree-card">
           {/* Encabezado de tabla */}
-          <div className="presupuesto-table-header">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 80px 80px 120px 120px 120px 175px 100px',
+            background: '#1e293b', color: 'white',
+            padding: '13px 16px', fontSize: 11,
+            fontWeight: 700, letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+          }}>
             <span>Ítem</span>
-            <span className="presupuesto-cell-center">Unidad</span>
-            <span className="presupuesto-cell-right">Cant.</span>
-            <span className="presupuesto-cell-right">V. Unitario</span>
-            <span className="presupuesto-cell-right">V. Total</span>
-            <span className="presupuesto-cell-right">Comprometido</span>
-            <span className="presupuesto-cell-center">Av. Físico</span>
-            <span className="presupuesto-cell-center">Acciones</span>
+            <span style={{ textAlign: 'center' }}>Unidad</span>
+            <span style={{ textAlign: 'right' }}>Cant.</span>
+            <span style={{ textAlign: 'right' }}>V. Unitario</span>
+            <span style={{ textAlign: 'right' }}>V. Total</span>
+            <span style={{ textAlign: 'right', paddingRight: 12, paddingLeft: 12 }}>Comprometido</span>
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ fontWeight: 700, letterSpacing: '0.06em' }}>AVANCE</span>{' '}
+              <span style={{ fontWeight: 400, color: '#93c5fd' }}>físico</span>
+              <span style={{ fontWeight: 300, color: '#94a3b8' }}> / </span>
+              <span style={{ fontWeight: 400, color: '#bfdbfe' }}>económico</span>
+            </div>
+            <span style={{ textAlign: 'center' }}>Acciones</span>
           </div>
 
           {/* Filas del árbol */}
@@ -437,11 +565,15 @@ export default function PresupuestoPage() {
                 <span className="presupuesto-cell-right presupuesto-capitulo-value">
                   {fmtCOPCorto(cap.valor_presupuestado)}
                 </span>
-                <span className="presupuesto-cell-right presupuesto-capitulo-value presupuesto-capitulo-value--normal">
+                <span className="presupuesto-cell-right presupuesto-capitulo-value presupuesto-capitulo-value--normal presupuesto-cell-comprometido">
                   {fmtCOPCorto(cap.valor_comprometido)}
                 </span>
-                <div className="presupuesto-cell-center">
-                  <BarraProgreso pct={cap.avance_fisico_pct} variant="light" />
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <BarraDoble
+                    fisico={cap.avance_fisico_calc || cap.avance_fisico_pct}
+                    economico={cap.avance_economico_pct || 0}
+                    invertido={true}
+                  />
                 </div>
                 {puedeEditar && (
                   <div className="presupuesto-action-group presupuesto-action-group--light"
@@ -502,7 +634,7 @@ export default function PresupuestoPage() {
                     <span className="presupuesto-cell-right presupuesto-sub-value">
                       {fmtCOPCorto(sub.valor_presupuestado)}
                     </span>
-                    <span className="presupuesto-cell-right presupuesto-sub-value presupuesto-sub-value--info">
+                    <span className="presupuesto-cell-right presupuesto-sub-value presupuesto-sub-value--info presupuesto-cell-comprometido">
                       {fmtCOPCorto(sub.valor_comprometido)}
                     </span>
                     <span className="presupuesto-cell-spacer" />
@@ -564,14 +696,34 @@ export default function PresupuestoPage() {
                       <span className="presupuesto-cell-right presupuesto-activity-total">
                         {fmtCOPCorto(act.vr_total)}
                       </span>
-                      <span className="presupuesto-cell-right presupuesto-activity-committed">
+                      <span className="presupuesto-cell-right presupuesto-activity-committed presupuesto-cell-comprometido">
                         {act.valor_comprometido > 0 ? fmtCOPCorto(act.valor_comprometido) : '—'}
                       </span>
-                      <div className="presupuesto-cell-center">
-                        {act.tipo === 'DETALLADA'
-                          ? <BarraProgreso pct={act.avance_fisico_pct} variant="primary" />
-                          : <span className="presupuesto-economic-only">Solo econ.</span>
-                        }
+                      <div style={{ display: 'flex', justifyContent: 'center', paddingRight: 4 }}>
+                        {act.tipo === 'DETALLADA' ? (
+                          <BarraDoble
+                            fisico={act.avance_fisico_pct}
+                            economico={act.vr_total > 0
+                              ? Math.round((act.valor_ejecutado / act.vr_total) * 1000) / 10
+                              : 0}
+                          />
+                        ) : (
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ height: 4, background: '#e2e8f0', borderRadius: 2,
+                              overflow: 'hidden', width: 80, marginBottom: 2 }}>
+                              <div style={{
+                                height: '100%', borderRadius: 2,
+                                width: `${Math.min(act.vr_total > 0 ? (act.valor_ejecutado / act.vr_total) * 100 : 0, 100)}%`,
+                                background: 'var(--color-warning)',
+                              }} />
+                            </div>
+                            <span style={{ fontSize: 10, color: 'var(--color-warning)', fontWeight: 600 }}>
+                              {act.vr_total > 0
+                                ? ((act.valor_ejecutado / act.vr_total) * 100).toFixed(1)
+                                : '0.0'}% econ.
+                            </span>
+                          </div>
+                        )}
                       </div>
                       {puedeEditar && (
                         <div className="presupuesto-action-group">

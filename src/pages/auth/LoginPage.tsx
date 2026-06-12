@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
+import { useProyecto } from '../../context/ProyectoContext'  // ← agrega
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 export default function LoginPage() {
-  const { login } = useAuth()
-  const { toast } = useToast()
-  const [email, setEmail] = useState('')
+  const { login }              = useAuth()
+  const { toast }              = useToast()
+  const { recargarProyectos }  = useProyecto()  // ← agrega
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error,    setError]    = useState('')
   const [cargando, setCargando] = useState(false)
   const navigate = useNavigate()
 
@@ -18,6 +20,7 @@ export default function LoginPage() {
     setCargando(true); setError('')
     try {
       const usuarioLogueado = await login(email, password)
+      recargarProyectos()  // ← agrega esta línea
       if (usuarioLogueado.debe_cambiar_password) {
         navigate('/cambiar-password')
       } else {

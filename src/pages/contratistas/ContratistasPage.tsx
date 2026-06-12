@@ -62,7 +62,7 @@ export default function ContratistasPage() {
       .catch(() => setEspecialidadesOpts([]))
   }, [])
 
-    const buscar = async (q: string, especialidad: string, activo: string) => {
+    const buscar = async (q: string, especialidad: string, activo: string, _forzar = false) => {
     setBuscando(true); setHasBuscado(true)
     try {
         const params = new URLSearchParams()
@@ -92,11 +92,6 @@ export default function ContratistasPage() {
     }, 350)
     }
 
-  const handleFiltro = (especialidad: string, activo: string) => {
-    setFiltroEspecialidad(especialidad)
-    setFiltroActivo(activo)
-    buscar(busqueda, especialidad, activo)
-  }
 
   const set = (key: string, value: any) => setForm(s => ({ ...s, [key]: value }))
 
@@ -170,26 +165,24 @@ export default function ContratistasPage() {
         </div>
 
         <select
-          className="form-select"
+          className="form-select form-select--w200"
           value={filtroEspecialidad}
-          onChange={e => handleFiltro(e.target.value, filtroActivo)}
+          onChange={e => { setFiltroEspecialidad(e.target.value); buscar(busqueda, e.target.value, filtroActivo) }}
           aria-label="Filtrar por especialidad"
-          style={{ width: 200 }}
         >
           <option value="">Todas las especialidades</option>
           {especialidadesOpts.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
 
         <select
-          className="form-select"
+          className="form-select form-select--w150"
           value={filtroActivo}
-          onChange={e => handleFiltro(filtroEspecialidad, e.target.value)}
+          onChange={e => { const val = e.target.value; setFiltroActivo(val); buscar(busqueda, filtroEspecialidad, val, true) }}
           aria-label="Filtrar por estado"
-          style={{ width: 150 }}
         >
-          <option value="">Activo e inactivo</option>
-          <option value="1">Solo activos</option>
-          <option value="0">Solo inactivos</option>
+          <option value="">Todos</option>
+          <option value="1">Activos</option>
+          <option value="0">Inactivos</option>
         </select>
       </div>
 

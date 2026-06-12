@@ -9,26 +9,32 @@ interface Proyecto {
 }
 
 interface ProyectoContextType {
-  proyecto:    Proyecto | null
-  setProyecto: (p: Proyecto | null) => void
-  proyectos:   Proyecto[]
-  cargando:    boolean
+  proyecto:         Proyecto | null
+  setProyecto:      (p: Proyecto | null) => void
+  proyectos:        Proyecto[]
+  cargando:         boolean
+  recargarProyectos: () => void
 }
 
 const ProyectoContext = createContext<ProyectoContextType>({
-  proyecto:    null,
-  setProyecto: () => {},
-  proyectos:   [],
-  cargando:    false,
+  proyecto:          null,
+  setProyecto:       () => {},
+  proyectos:         [],
+  cargando:          false,
+  recargarProyectos: () => {},
 })
 
 export function ProyectoProvider({ children }: { children: ReactNode }) {
   const [proyecto,  setProyectoState] = useState<Proyecto | null>(null)
   const [proyectos, setProyectos]     = useState<Proyecto[]>([])
-  const [cargando,  setCargando]      = useState(true)
+  const [cargando,  setCargando]      = useState(false)
 
-  // Cargar proyectos al montar
-  useEffect(() => {
+  const cargarProyectos = () => {
+    // ← Solo carga si hay token activo
+    const token = localStorage.getItem('token')
+    if (!token) { setCargando(false); return }
+
+    setCargando(true)
     api.get('/api/proyectos')
       .then(res => {
         const data = res.data.data as Proyecto[]
@@ -37,13 +43,19 @@ export function ProyectoProvider({ children }: { children: ReactNode }) {
         // Restaurar proyecto guardado en localStorage
         const guardado = localStorage.getItem('erp_proyecto_activo')
         if (guardado) {
-          const parsed = JSON.parse(guardado)
-          const existe = data.find(p => p.proyecto_id === parsed.proyecto_id)
-          if (existe) setProyectoState(existe)
+          try {
+            const parsed = JSON.parse(guardado)
+            const existe = data.find(p => p.proyecto_id === parsed.proyecto_id)
+            if (existe) setProyectoState(existe)
+          } catch {}
         }
       })
       .catch(() => {})
       .finally(() => setCargando(false))
+  }
+
+  useEffect(() => {
+    cargarProyectos()
   }, [])
 
   const setProyecto = (p: Proyecto | null) => {
@@ -53,7 +65,13 @@ export function ProyectoProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ProyectoContext.Provider value={{ proyecto, setProyecto, proyectos, cargando }}>
+    <ProyectoContext.Provider value={{
+      proyecto,
+      setProyecto,
+      proyectos,
+      cargando,
+      recargarProyectos: cargarProyectos,
+    }}>
       {children}
     </ProyectoContext.Provider>
   )

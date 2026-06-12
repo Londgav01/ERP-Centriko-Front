@@ -96,18 +96,20 @@ export default function AVPage() {
     : ctDisponibles
 
   useEffect(() => {
-    Promise.all([
-      api.get('/api/av'),
-      api.get('/api/av/ct-disponibles/lista'),
-    ]).then(([rAV, rCT]) => {
-      setLista(rAV.data.data)
-      setCtDisponibles(rCT.data.data)
-    }).finally(() => setCargandoPagina(false))
-  }, [])
+    if (proyecto) cargarLista().finally(() => setCargandoPagina(false))
+    else { setLista([]); setCargandoPagina(false) }
+  }, [proyecto?.proyecto_id])
+
+  useEffect(() => {
+    if (!proyecto) { setCtDisponibles([]); return }
+    api.get(`/api/av/ct-disponibles/lista?proyecto_id=${proyecto.proyecto_id}`)
+      .then(res => setCtDisponibles(res.data.data))
+  }, [proyecto?.proyecto_id])
 
   const cargarLista = async (estado = filtroEstado) => {
     const params = new URLSearchParams()
-    if (estado) params.append('estado', estado)
+    if (estado)                params.append('estado', estado)
+    if (proyecto?.proyecto_id) params.append('proyecto_id', proyecto.proyecto_id)
     const res = await api.get(`/api/av?${params}`)
     setLista(res.data.data); pag.reset()
   }
@@ -460,6 +462,24 @@ export default function AVPage() {
                       </span>
                     </label>
 
+                    <div style={{
+                      background: 'var(--color-info-bg)',
+                      border: '1px solid var(--color-info)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '10px 14px', marginBottom: 12,
+                      fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start',
+                    }}>
+                      <div style={{ fontWeight: 700, color: 'var(--color-info)', flexShrink: 0 }}>?</div>
+                      <div style={{ color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                        <strong style={{ color: 'var(--color-text-primary)' }}>Avance físico</strong>
+                        {' '}— ingresa cuántas unidades ejecutaste <strong>en este período</strong>.
+                        El sistema calcula automáticamente el porcentaje acumulado
+                        ({' '}<em>cant. acumulada ÷ cant. contratada × 100</em>).
+                        El <strong>avance económico</strong> es el valor del acta
+                        respecto al total del contrato.
+                      </div>
+                    </div>
+
                     <div className="data-table-wrapper" style={{ marginBottom: 16 }}>
                       <table className="data-table" style={{ tableLayout: 'fixed' }}>
                         <thead>
@@ -471,7 +491,20 @@ export default function AVPage() {
                             <th style={{ width: '10%', textAlign: 'right' }}>Ant. ejec.</th>
                             <th style={{ width: '12%' }}>Este acta</th>
                             <th style={{ width: '10%', textAlign: 'right' }}>Acumulado</th>
-                            <th style={{ width: '8%', textAlign: 'right' }}>% Avance</th>
+                            <th style={{ width: '8%', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                                % Avance
+                                <div title="Avance físico: porcentaje de la cantidad contratada que ya fue ejecutada en obra. Se calcula como: cant. acumulada ÷ cant. contratada × 100"
+                                  style={{
+                                    width: 14, height: 14, borderRadius: '50%',
+                                    background: 'var(--color-info)', color: 'white',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 9, fontWeight: 700, cursor: 'help', flexShrink: 0,
+                                  }}>
+                                  ?
+                                </div>
+                              </div>
+                            </th>
                             <th style={{ width: '10%', textAlign: 'right' }}>Valor</th>
                           </tr>
                         </thead>

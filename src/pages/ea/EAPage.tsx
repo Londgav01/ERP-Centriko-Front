@@ -12,6 +12,7 @@ import {
 import NumericInput from '../../components/ui/NumericInput'
 import { usePagination } from '../../hooks/usePagination'
 import Pagination from '../../components/ui/Pagination'
+import { useEdificacionesPorProyecto } from '../../hooks/useProyectoFiltro'
 
 interface OcDisponible {
   oc_id: string; nombre_proveedor: string; estado: string
@@ -56,10 +57,15 @@ export default function EAPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
   const { proyecto } = useProyecto()
+  const edificaciones = useEdificacionesPorProyecto()
 
   const [lista,         setLista]         = useState<EA[]>([])
   const pag = usePagination(lista)
   const [ocDisponibles, setOcDisponibles] = useState<OcDisponible[]>([])
+
+  const [filtroEdif,  setFiltroEdif]  = useState('')
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
 
   const [showForm,     setShowForm]     = useState(false)
   const [form,         setForm]         = useState(EMPTY_FORM)
@@ -81,24 +87,38 @@ export default function EAPage() {
     : []
 
   useEffect(() => {
-    Promise.all([
-      api.get('/api/ea'),
-      api.get('/api/ea/oc-disponibles/lista'),
-    ]).then(([rEA, rOC]) => {
-      setLista(rEA.data.data)
-      setOcDisponibles(rOC.data.data)
-      pag.reset()
-    }).finally(() => setCargandoPagina(false))
-  }, [])
-
-  useEffect(() => {
-    if (proyecto?.proyecto_id) cargarLista()
-    else { setLista([]); pag.reset() }
+    if (proyecto) cargarLista()
+    else { setLista([]); setOcDisponibles([]) }
   }, [proyecto?.proyecto_id])
 
   const cargarLista = async () => {
+    setCargandoPagina(true)
+    try {
+      const params = new URLSearchParams()
+      if (proyecto?.proyecto_id) params.append('proyecto_id', proyecto.proyecto_id)
+      if (filtroEdif)            params.append('edificio_id', filtroEdif)
+      if (filtroDesde)           params.append('desde', filtroDesde)
+      if (filtroHasta)           params.append('hasta', filtroHasta)
+      const [rEA, rOC] = await Promise.all([
+        api.get(`/api/ea?${params}`),
+        api.get('/api/ea/oc-disponibles/lista'),
+      ])
+      setLista(rEA.data.data)
+      setOcDisponibles(rOC.data.data)
+      pag.reset()
+    } finally { setCargandoPagina(false) }
+  }
+
+  const aplicarFiltros = async (
+    edif  = filtroEdif,
+    desde = filtroDesde,
+    hasta = filtroHasta
+  ) => {
     const params = new URLSearchParams()
     if (proyecto?.proyecto_id) params.append('proyecto_id', proyecto.proyecto_id)
+    if (edif)  params.append('edificio_id', edif)
+    if (desde) params.append('desde', desde)
+    if (hasta) params.append('hasta', hasta)
     const res = await api.get(`/api/ea?${params}`)
     setLista(res.data.data)
     pag.reset()
@@ -160,9 +180,7 @@ export default function EAPage() {
       await api.post('/api/ea', { ...form, items: itemsAEnviar })
       toast.success('Entrada de almacén registrada — stock actualizado')
       setShowForm(false); setForm(EMPTY_FORM); setOcSel(null); setItems([])
-      cargarLista()
-      const rOC = await api.get('/api/ea/oc-disponibles/lista')
-      setOcDisponibles(rOC.data.data)
+      await cargarLista()
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Error al guardar'
       setError(msg); toast.error(msg)
@@ -187,7 +205,7 @@ export default function EAPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Entradas de Almacén</h1>
-          <p className="page-subtitle">{lista.length} entrada{lista.length !== 1 ? 's' : ''} registrada{lista.length !== 1 ? 's' : ''}</p>
+          <p className="page-subtitle">Entradas de almacén por proyecto</p>
         </div>
         {puedeCrear && (
           <button className="btn btn-primary" disabled={!puedeCrearConProyecto} onClick={() => {
@@ -197,6 +215,38 @@ export default function EAPage() {
             <Plus size={15} /> Nueva entrada
           </button>
         )}
+      </div>
+
+      {/* Filtros */}
+      <div className="page-filters">
+        <select className="form-select form-select--w220" value={filtroEdif}
+          onChange={e => { setFiltroEdif(e.target.value); aplicarFiltros(e.target.value, filtroDesde, filtroHasta) }}
+          aria-label="Edificación">
+          <option value="">Todas las edificaciones</option>
+          {edificaciones.map(e => (
+            <option key={e.edificio_id} value={e.edificio_id}>{e.nombre}</option>
+          ))}
+        </select>
+
+        <input type="date" className="form-input form-input--w150" value={filtroDesde}
+          onChange={e => { setFiltroDesde(e.target.value); aplicarFiltros(filtroEdif, e.target.value, filtroHasta) }}
+          aria-label="Desde" />
+
+        <input type="date" className="form-input form-input--w150" value={filtroHasta}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={e => { setFiltroHasta(e.target.value); aplicarFiltros(filtroEdif, filtroDesde, e.target.value) }}
+          aria-label="Hasta" />
+
+        {(filtroEdif || filtroDesde || filtroHasta) && (
+          <button type="button" className="btn btn-secondary btn-sm"
+            onClick={() => { setFiltroEdif(''); setFiltroDesde(''); setFiltroHasta(''); cargarLista() }}>
+            Limpiar
+          </button>
+        )}
+
+        <span className="td-muted">
+          {lista.length} entrada{lista.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {/* Tabla */}

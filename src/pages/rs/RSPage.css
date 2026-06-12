@@ -73,6 +73,9 @@
 .rs-th-unidad    { width: 100px; text-align: center; }
 .rs-th-cantidad  { width: 160px; }
 .rs-th-notas     { width: auto; }
+.rs-th-precio          { width: 130px; text-align: right; }
+.rs-precio-valor       { font-weight: 600; color: var(--color-info); font-size: 11px; display: block; text-align: right; }
+.rs-precio-proveedor   { display: block; font-size: 10px; text-align: right; }
 .rs-th-actions   { width: 56px; text-align: center; }
 
 .rs-td-unidad    { text-align: center; }

@@ -7,24 +7,40 @@ import { useProyecto } from '../../context/ProyectoContext'
 import AlertaProyecto from '../../components/ui/AlertaProyecto'
 import {
   Download, Loader2, FileText, BarChart3,
-  Building2, Layers, TrendingUp, Calendar
+  Building2, TrendingUp, Calendar, FileSignature
 } from 'lucide-react'
 
 interface Proyecto    { proyecto_id: string; nombre: string }
 interface Edificacion { edificio_id: string; nombre: string; proyecto_id: string }
 
 type TipoReporte =
+  | 'tablero-capitulos'
+  | 'estado-contratos'
   | 'gastos-mes'
   | 'por-proyecto'
   | 'por-edificacion'
-  | 'por-capitulo'
   | 'avances-obra'
 
 const REPORTES: {
   id: TipoReporte; label: string; desc: string
   icon: React.ReactNode; colorBg: string; colorIcon: string
   filtroProy: boolean; filtroEdif: boolean; filtroFecha: boolean
+  filtroEstado?: boolean
 }[] = [
+  {
+    id: 'tablero-capitulos', label: 'Tablero de Capítulos',
+    desc: 'Presupuestado vs comprometido vs ejecutado con alertas semáforo por capítulo',
+    icon: <BarChart3 size={20} />,
+    colorBg: '#eff6ff', colorIcon: '#2563eb',
+    filtroProy: true, filtroEdif: true, filtroFecha: false,
+  },
+  {
+    id: 'estado-contratos', label: 'Estado de Contratos',
+    desc: 'Valor, anticipos, amortización, retegarantía, ejecutado y saldo por contrato',
+    icon: <FileSignature size={20} />,
+    colorBg: '#fff7ed', colorIcon: '#ea580c',
+    filtroProy: true, filtroEdif: false, filtroFecha: true, filtroEstado: true,
+  },
   {
     id: 'gastos-mes', label: 'Gastos por mes',
     desc: 'Materiales y contratos agrupados por mes, proyecto y capítulo',
@@ -47,13 +63,6 @@ const REPORTES: {
     filtroProy: true, filtroEdif: false, filtroFecha: false,
   },
   {
-    id: 'por-capitulo', label: 'Por capítulo',
-    desc: 'Detalle completo por capítulo con índice de eficiencia y alertas',
-    icon: <Layers size={20} />,
-    colorBg: 'var(--color-warning-bg)', colorIcon: 'var(--color-warning)',
-    filtroProy: true, filtroEdif: true, filtroFecha: false,
-  },
-  {
     id: 'avances-obra', label: 'Avances de obra',
     desc: 'Historial de actas de avance con avance físico y económico',
     icon: <TrendingUp size={20} />,
@@ -70,10 +79,15 @@ const fmtCOP = (v: any) => {
   }).format(n)
 }
 
+const ESTADOS_CT = ['BORRADOR', 'ACTIVO', 'EN_EJECUCIÓN', 'SUSPENDIDO', 'LIQUIDADO', 'ANULADO']
+
 const COLS_MONEDA = new Set([
   'Presupuestado','Comprometido','Ejecutado','Saldo',
   'Gasto Materiales','Gasto Contratos','Total Gasto',
-  'Valor Acta','Valor Retención','Amortización Anticipo','Neto a Pagar',
+  'Valor Acta','Valor Retención','Amortización Anticipo','Neto a Pagar','Comp. OC','Comp. CT','Comprometido Total',
+  'Ejec. Mat.','Ejec. CT','Ejecutado Total',
+  'Valor Contrato','Anticipo','Anticipo Amortizado','Ejecutado (AV)',
+  'Retegarantía','Neto Pagado','Por Ejecutar',
 ])
 
 export default function ReportesPage() {
@@ -89,6 +103,7 @@ export default function ReportesPage() {
   const [edificioId,  setEdificioId]  = useState('')
   const [desde,       setDesde]       = useState('')
   const [hasta,       setHasta]       = useState('')
+  const [estadoCt,    setEstadoCt]    = useState('')
 
   const [datos,     setDatos]     = useState<any[]>([])
   const [columnas,  setColumnas]  = useState<string[]>([])
@@ -129,6 +144,7 @@ export default function ReportesPage() {
       if (edificioId) params.append('edificio_id', edificioId)
       if (desde)      params.append('desde', desde)
       if (hasta)      params.append('hasta', hasta)
+      if (estadoCt)   params.append('estado', estadoCt)
 
       const res = await api.get(`/api/reportes/${tipoSel}?${params}`)
       const rows = res.data.data
@@ -156,7 +172,7 @@ export default function ReportesPage() {
   const seleccionarTipo = (id: TipoReporte) => {
     setTipoSel(id); setDatos([]); setColumnas([])
     setProyectoId(''); setEdificioId('')
-    setDesde(''); setHasta('')
+    setDesde(''); setHasta(''); setEstadoCt('')
     setEdifFilt([])
   }
 
@@ -260,6 +276,21 @@ export default function ReportesPage() {
                   <option value="">Todas</option>
                   {edifFilt.map(e => (
                     <option key={e.edificio_id} value={e.edificio_id}>{e.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Filtro estado contrato */}
+            {reporteActual.filtroEstado && (
+              <div className="form-group" style={{ margin: 0, minWidth: 180 }}>
+                <label className="form-label">Estado</label>
+                <select className="form-select" value={estadoCt}
+                  onChange={e => setEstadoCt(e.target.value)}
+                  aria-label="Filtrar por estado de contrato">
+                  <option value="">Todos</option>
+                  {ESTADOS_CT.map(s => (
+                    <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
               </div>

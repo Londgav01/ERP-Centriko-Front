@@ -55,16 +55,16 @@ export default function ProveedoresPage() {
       .catch(() => setCategoriasOpts([]))
   }, [])
 
-  const buscar = async (q: string, categoria: string, activo: string) => {
-    const activar = q.length >= 3 || categoria || activo !== ''
+  const cargarLista = async (activo = filtroActivo, q = busqueda, cat = filtroCategoria, forzar = false) => {
+    const activar = forzar || q.length >= 3 || !!cat || activo !== ''
     if (!activar) { setProveedores([]); setHasBuscado(false); return }
 
     setBuscando(true); setHasBuscado(true)
     try {
       const params = new URLSearchParams()
-      if (q)          params.append('q', q)
-      if (categoria)  params.append('categoria', categoria)
       if (activo !== '') params.append('activo', activo)
+      if (q)            params.append('q', q)
+      if (cat)          params.append('categoria', cat)
       const res = await api.get(`/api/proveedores?${params}`)
       setProveedores(res.data.data)
       pag.reset()
@@ -74,13 +74,7 @@ export default function ProveedoresPage() {
   const handleBusqueda = (q: string) => {
     setBusqueda(q)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => buscar(q, filtroCategoria, filtroActivo), 350)
-  }
-
-  const handleFiltro = (categoria: string, activo: string) => {
-    setFiltroCategoria(categoria)
-    setFiltroActivo(activo)
-    buscar(busqueda, categoria, activo)
+    debounceRef.current = setTimeout(() => cargarLista(filtroActivo, q, filtroCategoria), 350)
   }
 
   const set = (key: string, value: any) => setForm(s => ({ ...s, [key]: value }))
@@ -121,8 +115,7 @@ export default function ProveedoresPage() {
         toast.success('Proveedor creado correctamente')
       }
       setShowForm(false)
-      // Fix C-02: limpiar form ANTES de recargar — estado ya limpio al cerrar modal
-      buscar(busqueda, filtroCategoria, filtroActivo)
+      cargarLista()
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Error al guardar'
       setError(msg); toast.error(msg)
@@ -157,7 +150,7 @@ export default function ProveedoresPage() {
         <select
           className="form-select form-select--w160"
           value={filtroCategoria}
-          onChange={e => handleFiltro(e.target.value, filtroActivo)}
+          onChange={e => { setFiltroCategoria(e.target.value); cargarLista(filtroActivo, busqueda, e.target.value) }}
           aria-label="Filtrar por categoría"
         >
           <option value="">Todas las categorías</option>
@@ -167,12 +160,12 @@ export default function ProveedoresPage() {
         <select
           className="form-select form-select--w150"
           value={filtroActivo}
-          onChange={e => handleFiltro(filtroCategoria, e.target.value)}
+          onChange={e => { const val = e.target.value; setFiltroActivo(val); cargarLista(val, busqueda, filtroCategoria, true) }}
           aria-label="Filtrar por estado"
         >
-          <option value="">Activo e inactivo</option>
-          <option value="1">Solo activos</option>
-          <option value="0">Solo inactivos</option>
+          <option value="">Todos</option>
+          <option value="1">Activos</option>
+          <option value="0">Inactivos</option>
         </select>
       </div>
 

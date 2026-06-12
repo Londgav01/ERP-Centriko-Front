@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
-import { Plus, Pencil, Package, Loader2, AlertCircle, X, Search } from 'lucide-react'
+import { Plus, Pencil, Package, Loader2, AlertCircle, X, Search, Download, CheckCircle } from 'lucide-react'
 import { usePagination } from '../../hooks/usePagination'
 import Pagination from '../../components/ui/Pagination'
+import * as XLSX from 'xlsx'
+import './MaterialesPage.css'
 
-const UNIDADES   = ['UN','ML','M2','M3','KG','TON','GL','LT','BOLSA','ROLLO','JUEGO','OTROS']
+const UNIDADES = ['UN', 'ML', 'M2', 'M3', 'KG', 'TON', 'GL', 'LT', 'BOLSA', 'ROLLO', 'JUEGO', 'OTROS']
 
 interface Material {
   material_id: string; codigo: string; nombre: string
@@ -28,24 +30,29 @@ const fmtMiles = (v: number) => new Intl.NumberFormat('es-CO', { maximumFraction
 export default function MaterialesPage() {
   const { toast } = useToast()
 
-  const [materiales, setMateriales]   = useState<Material[]>([])
+  const [materiales, setMateriales] = useState<Material[]>([])
   const pag = usePagination(materiales)
-  const [busqueda,   setBusqueda]     = useState('')
+  const [busqueda, setBusqueda] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
-  const [filtroActivo,    setFiltroActivo]    = useState('')
-  const [buscando,   setBuscando]     = useState(false)
-  const [hasBuscado, setHasBuscado]   = useState(false)
+  const [filtroActivo, setFiltroActivo] = useState('')
+  const [buscando, setBuscando] = useState(false)
+  const [hasBuscado, setHasBuscado] = useState(false)
 
-  const [form,     setForm]     = useState(EMPTY)
-  const [editId,   setEditId]   = useState<string | null>(null)
+  const [form, setForm] = useState(EMPTY)
+  const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [error,    setError]    = useState('')
+  const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
 
   const [precioView, setPrecioView] = useState('')
   const [categoriasOpts, setCategoriasOpts] = useState<string[]>([])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [showImport, setShowImport] = useState(false)
+  const [preview, setPreview] = useState<any[]>([])
+  const [importando, setImportando] = useState(false)
+  const [resultImport, setResultImport] = useState<{ insertados: number; omitidos: number } | null>(null)
 
   useEffect(() => {
     api.get('/api/categorias?tipo=MATERIAL&activo=1')
@@ -55,34 +62,81 @@ export default function MaterialesPage() {
       .catch(() => setCategoriasOpts([]))
   }, [])
 
-  // ── Búsqueda con debounce (fix C-09) ──────────────────────
-  const buscar = async (q: string, categoria: string, activo: string) => {
-    const activarBusqueda = q.length >= 1 || categoria || activo !== ''
+  const cargarLista = async (activo = filtroActivo, q = busqueda, cat = filtroCategoria, forzar = false) => {
+    const activarBusqueda = forzar || q.length >= 1 || !!cat || activo !== ''
     if (!activarBusqueda) { setMateriales([]); setHasBuscado(false); return }
 
     setBuscando(true)
     setHasBuscado(true)
     try {
       const params = new URLSearchParams()
-      if (q)        params.append('q', q)
-      if (categoria) params.append('categoria', categoria)
       if (activo !== '') params.append('activo', activo)
+      if (q) params.append('q', q)
+      if (cat) params.append('categoria', cat)
       const res = await api.get(`/api/materiales?${params}`)
       setMateriales(res.data.data)
       pag.reset()
     } finally { setBuscando(false) }
   }
 
+  const leerExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const data = new Uint8Array(ev.target?.result as ArrayBuffer)
+      const wb = XLSX.read(data, { type: 'array' })
+
+      // Buscar hoja MATERIALES
+      const sheetName = wb.SheetNames.find(n => n.toUpperCase() === 'MATERIALES')
+      if (!sheetName) { toast.error('No se encontró la hoja MATERIALES en el Excel'); return }
+
+      const ws = wb.Sheets[sheetName]
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
+
+      // Filtrar filas válidas: tiene descripción y unidad
+      const materiales = rows
+        .filter(row =>
+          row[1] && row[2] &&                              // tiene descripción y unidad
+          typeof row[1] === 'string' &&
+          row[1] !== 'DESCRIPCIÓN' &&                      // no es encabezado
+          row[1] !== 'BASE DE DATOS DE MATERIALES' &&
+          row[1] !== 'MASTER PACK COLOMBIA'
+        )
+        .map(row => ({
+          tipo: row[0] || '',
+          nombre: String(row[1]).trim(),
+          unidad: String(row[2]).trim(),
+          precio_ref: Number(row[3]) || 0,
+          categoria: row[0] ? String(row[0]).trim() : null,
+        }))
+        .filter(m => m.nombre.length > 2)  // descartar filas muy cortas
+
+      setPreview(materiales)
+      setResultImport(null)
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+
+  const ejecutarImport = async () => {
+    if (!preview.length) return
+    setImportando(true)
+    try {
+      const res = await api.post('/api/materiales/importar-bulk', { items: preview })
+      setResultImport(res.data.data)
+      toast.success(`Importación completada: ${res.data.data.insertados} insertados`)
+      if (res.data.data.insertados > 0) cargarLista()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Error en la importación')
+    } finally { setImportando(false) }
+  }
+
   const handleBusqueda = (q: string) => {
     setBusqueda(q)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => buscar(q, filtroCategoria, filtroActivo), 350)
-  }
-
-  const handleFiltro = (categoria: string, activo: string) => {
-    setFiltroCategoria(categoria)
-    setFiltroActivo(activo)
-    buscar(busqueda, categoria, activo)
+    debounceRef.current = setTimeout(() => cargarLista(filtroActivo, q, filtroCategoria), 350)
   }
 
   const set = (key: string, value: any) => setForm(s => ({ ...s, [key]: value }))
@@ -118,7 +172,7 @@ export default function MaterialesPage() {
         toast.success('Material creado correctamente')
       }
       setShowForm(false)
-      buscar(busqueda, filtroCategoria, filtroActivo)
+      cargarLista()
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Error al guardar'
       setError(msg); toast.error(msg)
@@ -132,9 +186,16 @@ export default function MaterialesPage() {
           <h1 className="page-title">Materiales</h1>
           <p className="page-subtitle">Catálogo de insumos del sistema</p>
         </div>
-        <button className="btn btn-primary" onClick={abrirNuevo}>
-          <Plus size={15} /> Nuevo material
-        </button>
+        <div className="header-actions">
+          <button className="btn btn-secondary" onClick={() => {
+            setShowImport(true); setPreview([]); setResultImport(null)
+          }}>
+            <Download size={15} /> Importar Excel
+          </button>
+          <button className="btn btn-primary" onClick={abrirNuevo}>
+            <Plus size={15} /> Nuevo material
+          </button>
+        </div>
       </div>
 
       {/* Barra de búsqueda y filtros */}
@@ -153,7 +214,7 @@ export default function MaterialesPage() {
         <select
           className="form-select form-select--w180"
           value={filtroCategoria}
-          onChange={e => handleFiltro(e.target.value, filtroActivo)}
+          onChange={e => { setFiltroCategoria(e.target.value); cargarLista(filtroActivo, busqueda, e.target.value) }}
           aria-label="Filtrar por categoría"
         >
           <option value="">Todas las categorías</option>
@@ -163,12 +224,12 @@ export default function MaterialesPage() {
         <select
           className="form-select form-select--w140"
           value={filtroActivo}
-          onChange={e => handleFiltro(filtroCategoria, e.target.value)}
+          onChange={e => { const val = e.target.value; setFiltroActivo(val); cargarLista(val, busqueda, filtroCategoria, true) }}
           aria-label="Filtrar por estado"
         >
-          <option value="">Activo e inactivo</option>
-          <option value="1">Solo activos</option>
-          <option value="0">Solo inactivos</option>
+          <option value="">Todos</option>
+          <option value="1">Activos</option>
+          <option value="0">Inactivos</option>
         </select>
       </div>
 
@@ -373,6 +434,95 @@ export default function MaterialesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal importación */}
+      {showImport && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowImport(false)}>
+          <div className="modal modal-lg">
+            <div className="modal-header">
+              <span className="modal-title">Importar materiales desde Excel</span>
+              <button type="button" className="btn btn-ghost btn-sm modal-close-button"
+                onClick={() => setShowImport(false)} aria-label="Cerrar"><X size={16} /></button>
+            </div>
+
+            <div className="modal-body">
+              <div className="alert alert-info mat-import-info">
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>
+                  Selecciona un archivo Excel con una hoja llamada <strong>MATERIALES</strong>.
+                  Columnas requeridas: <strong>DESCRIPCIÓN | UNIDAD | PRECIO UNITARIO</strong>
+                </span>
+              </div>
+
+              <div className="form-group mat-import-file">
+                <label className="form-label" htmlFor="mat-import-file">Archivo Excel (.xlsx)</label>
+                <input id="mat-import-file" type="file" accept=".xlsx,.xls" className="form-input"
+                  title="Seleccionar archivo Excel" onChange={leerExcel} />
+              </div>
+
+              {resultImport && (
+                <div className={`alert mat-import-result ${resultImport.insertados > 0 ? 'alert-success' : 'alert-warning'}`}>
+                  <CheckCircle size={15} style={{ flexShrink: 0 }} />
+                  <span>
+                    <strong>{resultImport.insertados}</strong> materiales importados ·{' '}
+                    <strong>{resultImport.omitidos}</strong> omitidos (ya existían o sin datos)
+                  </span>
+                </div>
+              )}
+
+              {preview.length > 0 && !resultImport && (
+                <>
+                  <p className="form-hint mat-preview-header">
+                    {preview.length} materiales encontrados — vista previa (primeros 10)
+                  </p>
+                  <div className="data-table-wrapper mat-preview-table">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th className="mat-th-unidad">Unidad</th>
+                          <th className="mat-th-precio">Precio ref.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.slice(0, 10).map((m, i) => (
+                          <tr key={i}>
+                            <td className="mat-td-nombre">{m.nombre}</td>
+                            <td className="mat-td-unidad">
+                              <span className="badge badge-neutral">{m.unidad}</span>
+                            </td>
+                            <td className="mat-td-precio">{fmtCOP(m.precio_ref)}</td>
+                          </tr>
+                        ))}
+                        {preview.length > 10 && (
+                          <tr>
+                            <td colSpan={3} className="td-muted mat-td-more">
+                              … y {preview.length - 10} materiales más
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowImport(false)}>
+                Cerrar
+              </button>
+              {preview.length > 0 && !resultImport && (
+                <button type="button" className="btn btn-primary" onClick={ejecutarImport} disabled={importando}>
+                  {importando
+                    ? <><Loader2 size={14} className="spinner" /> Importando {preview.length} materiales...</>
+                    : <><Download size={14} /> Importar {preview.length} materiales</>
+                  }
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

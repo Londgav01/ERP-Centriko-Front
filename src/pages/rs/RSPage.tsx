@@ -36,6 +36,10 @@ interface RSDetalle {
   unidad: string; cantidad_solicitada: number; cantidad_aprobada: number; notas: string
 }
 
+const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', {
+  style: 'currency', currency: 'COP', maximumFractionDigits: 0
+}).format(v || 0)
+
 const PRIORIDADES = ['BAJA','MEDIA','ALTA','URGENTE']
 const ESTADOS     = ['BORRADOR','APROBADA','EN_PROCESO','COMPLETADA','RECHAZADA','ANULADA']
 
@@ -88,6 +92,7 @@ export default function RSPage() {
   const [matSugerencias, setMatSugerencias] = useState<Record<number, Material[]>>({})
   const [matAbierto,     setMatAbierto]     = useState<number | null>(null)
   const debMatRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+  const [ultimosPrecios, setUltimosPrecios] = useState<Record<string, any>>({})
 
   const [cargandoPagina, setCargandoPagina] = useState(true)
 
@@ -149,6 +154,11 @@ export default function RSPage() {
     setMatBusqueda(s => ({ ...s, [idx]: mat.nombre }))
     setMatSugerencias(s => ({ ...s, [idx]: [] }))
     setMatAbierto(null)
+    if (!ultimosPrecios[mat.material_id]) {
+      api.get(`/api/rs/ultimo-precio/${mat.material_id}`)
+        .then(res => { if (res.data.data) setUltimosPrecios(s => ({ ...s, [mat.material_id]: res.data.data })) })
+        .catch(() => {})
+    }
   }
 
   const agregarItem = () => {
@@ -412,7 +422,8 @@ export default function RSPage() {
                           <th className="rs-th-unidad">Unidad</th>
                           <th className="rs-th-cantidad">Cantidad</th>
                           <th className="rs-th-notas">Notas</th>
-                          <th className="rs-th-actions"></th>
+                          <th className="rs-th-precio">Último precio</th>
+                          <th className="rs-th-actions" aria-label="Acciones"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -459,6 +470,20 @@ export default function RSPage() {
                                 value={item.notas} placeholder="Observación"
                                 onChange={e => actualizarItem(idx, 'notas', e.target.value)}
                                 aria-label={`Notas ítem ${idx + 1}`} />
+                            </td>
+                            <td className="rs-th-precio">
+                              {ultimosPrecios[item.material_id] ? (
+                                <div>
+                                  <span className="rs-precio-valor">
+                                    {fmtCOP(ultimosPrecios[item.material_id].precio_unitario)}
+                                  </span>
+                                  <span className="td-muted rs-precio-proveedor">
+                                    {ultimosPrecios[item.material_id].nombre_proveedor}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="td-muted">Sin historial</span>
+                              )}
                             </td>
                             <td>
                               <button type="button" className="btn btn-danger btn-sm rs-trash-button"

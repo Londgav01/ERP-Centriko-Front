@@ -22,6 +22,8 @@ import AVPage from './pages/av/AVPage'
 import ReportesPage from './pages/reportes/ReportesPage'
 import PresupuestoPage from './pages/presupuesto/PresupuestoPage'
 import CambiarPasswordPage from './pages/auth/CambiarPasswordPage'
+import ContratoDetallePage from './pages/ct/ContratoDetallePage'
+import FacturasPage from './pages/facturas/FacturasPage'
 
 // Actualiza RutaProtegida
 function RutaProtegida({ children }: { children: React.ReactNode }) {
@@ -58,7 +60,9 @@ export default function App() {
       <Route path="/actas" element={<RutaProtegida><AVPage /></RutaProtegida>} />
       <Route path="/reportes" element={<RutaProtegida><ReportesPage /></RutaProtegida>} />
       <Route path="/presupuesto" element={<RutaProtegida><PresupuestoPage /></RutaProtegida>} />
+      <Route path="/contratos/:ct_id" element={<RutaProtegida><ContratoDetallePage /></RutaProtegida>} />
       <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
+      <Route path="/facturas" element={<RutaProtegida><FacturasPage /></RutaProtegida>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

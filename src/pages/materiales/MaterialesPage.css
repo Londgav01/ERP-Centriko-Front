@@ -1,0 +1,12 @@
+.mat-import-info     { margin-bottom: 16px; }
+.mat-import-file     { margin-bottom: 16px; }
+.mat-import-result   { margin-bottom: 16px; }
+.mat-preview-header  { margin-bottom: 8px; font-weight: 600; font-size: 13px; }
+.mat-preview-table   { margin-bottom: 0; }
+
+.mat-th-unidad       { text-align: center; width: 80px; }
+.mat-th-precio       { text-align: right; width: 130px; }
+.mat-td-nombre       { font-size: 12px; }
+.mat-td-unidad       { text-align: center; }
+.mat-td-precio       { text-align: right; font-size: 12px; }
+.mat-td-more         { text-align: center; font-style: italic; font-size: 12px; }
