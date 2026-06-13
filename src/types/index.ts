@@ -19,3 +19,7 @@ export interface ApiResponse<T = any> {
   data?: T
   error?: string
 }
+
+// Tipos de dominio centralizados (entidades maestras y documentos)
+export * from './maestros'
+export * from './documentos'

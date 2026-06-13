@@ -1,6 +1,5 @@
 
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
@@ -50,7 +49,6 @@ export default function FacturasPage() {
   const { toast }   = useToast()
   const { usuario } = useAuth()
   const { proyecto } = useProyecto()
-  const navigate    = useNavigate()
 
   const [lista,         setLista]         = useState<Factura[]>([])
   const [ocDisponibles, setOcDisponibles] = useState<OcDisponible[]>([])

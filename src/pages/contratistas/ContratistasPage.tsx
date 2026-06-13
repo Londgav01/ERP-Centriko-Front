@@ -1,20 +1,28 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import type { FormEvent } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
-import { useToast } from '../../context/ToastContext'
-import { Plus, Pencil, Users, Loader2, AlertCircle, X, Search } from 'lucide-react'
+import { Plus, Pencil, Users, Search } from 'lucide-react'
+import {
+  PageHeader, FilterBar, SelectFiltro, DataTable, FormModal, RowActions, EstadoBadge,
+} from '../../components/ui'
+import type { Columna } from '../../components/ui'
+import { useFormModal } from '../../hooks/useFormModal'
+import { useDebounce } from '../../hooks/useDebounce'
+import type { Contratista } from '../../types'
 
-interface Contratista {
-  contratista_id: string; nombre: string; nit: string
-  especialidad: string; contacto: string; telefono: string
-  email: string; ciudad: string; activo: number
-}
-
-const EMPTY = {
+/** Formulario vacío para crear/editar un contratista. */
+const EMPTY_FORM = {
   nombre: '', nit: '', especialidad: '', contacto: '',
-  telefono: '', email: '', ciudad: '', activo: true
+  telefono: '', email: '', ciudad: '', activo: true,
 }
 
+/**
+ * Valida el NIT en cliente.
+ *
+ * @param nit - NIT tal como lo escribió el usuario (puede traer puntos/guiones/espacios)
+ * @returns Mensaje de error, o cadena vacía si es válido
+ */
 function validarNitCliente(nit: string): string {
   const limpio = nit.replace(/[.\-\s]/g, '')
   if (!limpio) return ''
@@ -23,136 +31,161 @@ function validarNitCliente(nit: string): string {
   return ''
 }
 
-const BADGE_ESPECIALIDAD: Record<string, string> = {
-  ESTRUCTURA:        'badge-info',
-  MAMPOSTERÍA:       'badge-info',
-  INSTALACIONES_HID: 'badge-info',
-  INSTALACIONES_ELEC:'badge-info',
-  ACABADOS:          'badge-neutral',
-  CARPINTERÍA:       'badge-neutral',
-  OBRA_GRUESA:       'badge-info',
-  VARIOS:            'badge-neutral',
-}
-
+/**
+ * Página maestra de Contratistas: carga inicial completa, búsqueda con
+ * debounce, filtros por especialidad y estado, y formulario en modal.
+ *
+ * Nota: esta página NO pagina (muestra toda la lista), igual que la
+ * versión original — DataTable se usa con `items` en vez de `pag`.
+ */
 export default function ContratistasPage() {
-  const { toast } = useToast()
-
-  const [contratistas,    setContratistas]    = useState<Contratista[]>([])
-  const [busqueda,        setBusqueda]        = useState('')
+  const [contratistas,       setContratistas]       = useState<Contratista[]>([])
+  const [busqueda,           setBusqueda]           = useState('')
   const [filtroEspecialidad, setFiltroEspecialidad] = useState('')
-  const [filtroActivo,    setFiltroActivo]    = useState('')
-  const [buscando,        setBuscando]        = useState(false)
-  const [hasBuscado,      setHasBuscado]      = useState(true)
-
-  const [form,     setForm]     = useState(EMPTY)
-  const [editId,   setEditId]   = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [error,    setError]    = useState('')
-  const [nitError, setNitError] = useState('')
-  const [cargando, setCargando] = useState(false)
+  const [filtroActivo,       setFiltroActivo]       = useState('')
+  const [buscando,           setBuscando]           = useState(false)
+  const [hasBuscado,         setHasBuscado]         = useState(true)
+  const [nitError,           setNitError]           = useState('')
   const [especialidadesOpts, setEspecialidadesOpts] = useState<string[]>([])
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fm = useFormModal(EMPTY_FORM)
 
+  /** Carga el catálogo de especialidades (categorías tipo CONTRATISTA). */
   useEffect(() => {
     api.get('/api/categorias?tipo=CONTRATISTA&activo=1')
       .then(res => {
-        setEspecialidadesOpts(res.data.data.map((c: any) => c.nombre))
+        setEspecialidadesOpts(res.data.data.map((c: { nombre: string }) => c.nombre))
       })
       .catch(() => setEspecialidadesOpts([]))
   }, [])
 
-    const buscar = async (q: string, especialidad: string, activo: string, _forzar = false) => {
+  /**
+   * Busca contratistas. Los filtros llegan como PARÁMETROS directos
+   * (patrón cargarLista del proyecto).
+   *
+   * @param q - Texto de búsqueda
+   * @param especialidad - Especialidad seleccionada
+   * @param activo - '' | '1' | '0'
+   */
+  const buscar = async (q: string, especialidad: string, activo: string) => {
     setBuscando(true); setHasBuscado(true)
     try {
-        const params = new URLSearchParams()
-        if (q)            params.append('q', q)
-        if (especialidad) params.append('especialidad', especialidad)
-        if (activo !== '') params.append('activo', activo)
-        const res = await api.get(`/api/contratistas?${params}`)
-        setContratistas(res.data.data)
+      const params = new URLSearchParams()
+      if (q)             params.append('q', q)
+      if (especialidad)  params.append('especialidad', especialidad)
+      if (activo !== '') params.append('activo', activo)
+      const res = await api.get(`/api/contratistas?${params}`)
+      setContratistas(res.data.data)
     } finally { setBuscando(false) }
-    }
+  }
 
+  /** Carga inicial: todos los contratistas sin filtros. */
   const cargarTodos = async () => {
     setBuscando(true)
     try {
-        const res = await api.get('/api/contratistas')
-        setContratistas(res.data.data)
-        } finally { setBuscando(false) }
-    }
+      const res = await api.get('/api/contratistas')
+      setContratistas(res.data.data)
+    } finally { setBuscando(false) }
+  }
 
-    useEffect(() => { cargarTodos() }, [])
+  useEffect(() => { cargarTodos() }, [])
 
-    const handleBusqueda = (q: string) => {
+  /** Debounce de 350 ms; solo busca con campo vacío o ≥3 caracteres. */
+  const buscarDebounced = useDebounce((q: string) => {
+    if (q === '' || q.length >= 3) buscar(q, filtroEspecialidad, filtroActivo)
+  }, 350)
+
+  const handleBusqueda = (q: string) => {
     setBusqueda(q)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-        if (q === '' || q.length >= 3) buscar(q, filtroEspecialidad, filtroActivo)
-    }, 350)
-    }
+    buscarDebounced(q)
+  }
 
-
-  const set = (key: string, value: any) => setForm(s => ({ ...s, [key]: value }))
-
+  /** Actualiza el NIT en el form y su validación en vivo. */
   const handleNit = (val: string) => {
-    set('nit', val)
+    fm.set('nit', val)
     setNitError(validarNitCliente(val))
   }
 
+  /** Abre el modal en modo creación con el formulario limpio. */
   const abrirNuevo = () => {
-    setForm(EMPTY); setEditId(null)
-    setError(''); setNitError(''); setShowForm(true)
+    setNitError('')
+    fm.abrirNuevo()
   }
 
+  /** Abre el modal en modo edición con los datos del contratista. */
   const abrirEditar = (ct: Contratista) => {
-    setForm({
+    setNitError('')
+    fm.abrirEditar(ct.contratista_id, {
       nombre: ct.nombre, nit: ct.nit,
       especialidad: ct.especialidad || '',
       contacto: ct.contacto || '', telefono: ct.telefono || '',
       email: ct.email || '', ciudad: ct.ciudad || '',
-      activo: ct.activo === 1
+      activo: ct.activo === 1,
     })
-    setEditId(ct.contratista_id)
-    setError(''); setNitError(''); setShowForm(true)
   }
 
-  const guardar = async (ev: React.FormEvent) => {
+  /** Crea o actualiza el contratista y rebusca con los filtros vigentes. */
+  const guardar = async (ev: FormEvent) => {
     ev.preventDefault()
-    const nitErr = validarNitCliente(form.nit)
+    const nitErr = validarNitCliente(fm.form.nit)
     if (nitErr) { setNitError(nitErr); return }
 
-    setCargando(true); setError('')
-    try {
-      if (editId) {
-        await api.put(`/api/contratistas/${editId}`, form)
-        toast.success('Contratista actualizado correctamente')
-      } else {
-        await api.post('/api/contratistas', form)
-        toast.success('Contratista creado correctamente')
-      }
-      setShowForm(false)
-      buscar(busqueda, filtroEspecialidad, filtroActivo)
-    } catch (err: any) {
-      const msg = err.response?.data?.error || 'Error al guardar'
-      setError(msg); toast.error(msg)
-    } finally { setCargando(false) }
+    const ok = await fm.guardar(
+      async () => {
+        if (fm.editId) await api.put(`/api/contratistas/${fm.editId}`, fm.form)
+        else           await api.post('/api/contratistas', fm.form)
+      },
+      { exito: fm.editId ? 'Contratista actualizado correctamente' : 'Contratista creado correctamente' }
+    )
+    if (ok) buscar(busqueda, filtroEspecialidad, filtroActivo)
   }
+
+  /** Columnas de la tabla (mismo orden y clases que la versión anterior). */
+  const columnas: Columna<Contratista>[] = [
+    { header: 'ID', className: 'td-id', render: ct => ct.contratista_id },
+    { header: 'Razón social', className: 'td-bold', render: ct => ct.nombre },
+    { header: 'NIT', render: ct => <span className="font-mono">{ct.nit}</span> },
+    {
+      header: 'Especialidad',
+      render: ct => ct.especialidad
+        ? <EstadoBadge estado={ct.especialidad} tipo="especialidad" />
+        : <span className="td-muted">—</span>,
+    },
+    { header: 'Contacto', className: 'td-secondary', render: ct => ct.contacto || '—' },
+    { header: 'Teléfono', className: 'td-secondary', render: ct => ct.telefono || '—' },
+    { header: 'Ciudad', className: 'td-secondary', render: ct => ct.ciudad || '—' },
+    {
+      header: 'Estado',
+      render: ct => (
+        <span className={`badge ${ct.activo ? 'badge-success' : 'badge-danger'}`}>
+          {ct.activo ? 'ACTIVO' : 'INACTIVO'}
+        </span>
+      ),
+    },
+    {
+      header: 'Acciones',
+      render: ct => (
+        <RowActions acciones={[
+          { label: 'Editar', icon: <Pencil size={13} />, onClick: () => abrirEditar(ct) },
+        ]} />
+      ),
+    },
+  ]
 
   return (
     <MainLayout>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Contratistas</h1>
-          <p className="page-subtitle">Terceros para contratos de obra</p>
-        </div>
-        <button className="btn btn-primary" onClick={abrirNuevo}>
-          <Plus size={15} /> Nuevo contratista
-        </button>
-      </div>
+      <PageHeader
+        title="Contratistas"
+        subtitle="Terceros para contratos de obra"
+        actions={
+          <button className="btn btn-primary" onClick={abrirNuevo}>
+            <Plus size={15} /> Nuevo contratista
+          </button>
+        }
+      />
 
       {/* Filtros */}
-      <div className="page-filters">
+      <FilterBar>
         <div className="search-bar">
           <Search size={14} />
           <input
@@ -164,240 +197,162 @@ export default function ContratistasPage() {
           />
         </div>
 
-        <select
-          className="form-select form-select--w200"
+        <SelectFiltro
+          className="form-select--w200"
           value={filtroEspecialidad}
-          onChange={e => { setFiltroEspecialidad(e.target.value); buscar(busqueda, e.target.value, filtroActivo) }}
-          aria-label="Filtrar por especialidad"
-        >
-          <option value="">Todas las especialidades</option>
-          {especialidadesOpts.map(e => <option key={e} value={e}>{e}</option>)}
-        </select>
+          onChange={v => { setFiltroEspecialidad(v); buscar(busqueda, v, filtroActivo) }}
+          placeholder="Todas las especialidades"
+          options={especialidadesOpts.map(e => ({ value: e, label: e }))}
+          ariaLabel="Filtrar por especialidad"
+        />
 
-        <select
-          className="form-select form-select--w150"
+        <SelectFiltro
+          className="form-select--w150"
           value={filtroActivo}
-          onChange={e => { const val = e.target.value; setFiltroActivo(val); buscar(busqueda, filtroEspecialidad, val, true) }}
-          aria-label="Filtrar por estado"
-        >
-          <option value="">Todos</option>
-          <option value="1">Activos</option>
-          <option value="0">Inactivos</option>
-        </select>
-      </div>
+          onChange={v => { setFiltroActivo(v); buscar(busqueda, filtroEspecialidad, v) }}
+          placeholder="Todos"
+          options={[
+            { value: '1', label: 'Activos' },
+            { value: '0', label: 'Inactivos' },
+          ]}
+          ariaLabel="Filtrar por estado"
+        />
+      </FilterBar>
 
-      {/* Tabla */}
-      <div className="data-table-wrapper">
-        {buscando ? (
-          <div className="page-loading">
-            <Loader2 size={18} className="spinner" />
-            <span>Buscando contratistas...</span>
+      {/* Tabla (sin paginación, como la versión original) */}
+      <DataTable
+        columns={columnas}
+        items={contratistas}
+        rowKey={ct => ct.contratista_id}
+        cargando={buscando}
+        cargandoTexto="Buscando contratistas..."
+        cargandoSize={18}
+        emptyIcon={Users}
+        emptyText={!hasBuscado
+          ? 'Escribe al menos 3 caracteres o aplica un filtro para ver contratistas'
+          : 'No se encontraron contratistas con ese criterio'}
+      />
+
+      {/* Modal crear/editar */}
+      <FormModal
+        open={fm.show}
+        title={fm.editId ? `Editar — ${fm.editId}` : 'Nuevo contratista'}
+        onClose={fm.cerrar}
+        onSubmit={guardar}
+        className="modal-lg"
+        error={fm.error}
+        cargando={fm.cargando}
+        submitLabel={fm.editId ? 'Guardar cambios' : 'Crear contratista'}
+        disabledSubmit={!!nitError}
+      >
+        {/* Razón social + NIT */}
+        <div className="form-grid-2 form-section-gap">
+          <div className="form-group">
+            <label className="form-label required" htmlFor="cont-nombre">Razón social</label>
+            <input
+              id="cont-nombre"
+              className="form-input"
+              value={fm.form.nombre}
+              onChange={e => fm.set('nombre', e.target.value)}
+              required placeholder="Nombre o razón social"
+            />
           </div>
-        ) : !hasBuscado ? (
-          <div className="search-empty-state">
-            <Users size={32} style={{ color: 'var(--color-text-muted)' }} />
-            <span>Escribe al menos 3 caracteres o aplica un filtro para ver contratistas</span>
-          </div>
-        ) : contratistas.length === 0 ? (
-          <div className="search-empty-state">
-            <Users size={32} style={{ color: 'var(--color-text-muted)' }} />
-            <span>No se encontraron contratistas con ese criterio</span>
-          </div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Razón social</th>
-                <th>NIT</th>
-                <th>Especialidad</th>
-                <th>Contacto</th>
-                <th>Teléfono</th>
-                <th>Ciudad</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contratistas.map(ct => (
-                <tr key={ct.contratista_id}>
-                  <td className="td-id">{ct.contratista_id}</td>
-                  <td className="td-bold">{ct.nombre}</td>
-                  <td><span className="font-mono">{ct.nit}</span></td>
-                  <td>
-                    {ct.especialidad
-                      ? <span className={`badge ${BADGE_ESPECIALIDAD[ct.especialidad] || 'badge-neutral'}`}>{ct.especialidad}</span>
-                      : <span className="td-muted">—</span>}
-                  </td>
-                  <td className="td-secondary">{ct.contacto || '—'}</td>
-                  <td className="td-secondary">{ct.telefono || '—'}</td>
-                  <td className="td-secondary">{ct.ciudad || '—'}</td>
-                  <td>
-                    <span className={`badge ${ct.activo ? 'badge-success' : 'badge-danger'}`}>
-                      {ct.activo ? 'ACTIVO' : 'INACTIVO'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="table-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(ct)}>
-                        <Pencil size={13} /> Editar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Modal */}
-      {showForm && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal modal-lg">
-            <div className="modal-header">
-              <span className="modal-title">
-                {editId ? `Editar — ${editId}` : 'Nuevo contratista'}
-              </span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}
-                style={{ padding: '0 6px' }} aria-label="Cerrar">
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={guardar}>
-              <div className="modal-body">
-                {error && (
-                  <div className="alert alert-error">
-                    <AlertCircle size={15} style={{ flexShrink: 0 }} />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                {/* Razón social + NIT */}
-                <div className="form-grid-2" style={{ marginBottom: 16 }}>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="cont-nombre">Razón social</label>
-                    <input
-                      id="cont-nombre"
-                      className="form-input"
-                      value={form.nombre}
-                      onChange={e => set('nombre', e.target.value)}
-                      required placeholder="Nombre o razón social"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="cont-nit">NIT / Cédula</label>
-                    <input
-                      id="cont-nit"
-                      className={`form-input font-mono ${nitError ? 'error' : ''}`}
-                      value={form.nit}
-                      onChange={e => handleNit(e.target.value)}
-                      required placeholder="Ej: 9001234567"
-                    />
-                    {nitError
-                      ? <span className="hint-error">{nitError}</span>
-                      : <span className="form-hint">Sin puntos ni guiones — solo números</span>
-                    }
-                  </div>
-                </div>
-
-                {/* Especialidad + Ciudad */}
-                <div className="form-grid-2" style={{ marginBottom: 16 }}>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="cont-esp">Especialidad</label>
-                    <select
-                      id="cont-esp"
-                      className="form-select"
-                      value={form.especialidad}
-                      onChange={e => set('especialidad', e.target.value)}
-                      aria-label="Especialidad del contratista"
-                    >
-                      <option value="">Sin especialidad</option>
-                      {especialidadesOpts.map((e: string) => <option key={e} value={e}>{e}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="cont-ciudad">Ciudad</label>
-                    <input
-                      id="cont-ciudad"
-                      className="form-input"
-                      value={form.ciudad}
-                      onChange={e => set('ciudad', e.target.value)}
-                      placeholder="Ej: Bogotá"
-                    />
-                  </div>
-                </div>
-
-                {/* Contacto + Teléfono + Email */}
-                <div className="form-grid-3" style={{ marginBottom: 16 }}>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="cont-contacto">Persona de contacto</label>
-                    <input
-                      id="cont-contacto"
-                      className="form-input"
-                      value={form.contacto}
-                      onChange={e => set('contacto', e.target.value)}
-                      placeholder="Nombre del contacto"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="cont-tel">Teléfono</label>
-                    <input
-                      id="cont-tel"
-                      className="form-input"
-                      value={form.telefono}
-                      onChange={e => set('telefono', e.target.value)}
-                      placeholder="Ej: 3001234567"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="cont-email">Email</label>
-                    <input
-                      id="cont-email"
-                      type="email"
-                      className="form-input"
-                      value={form.email}
-                      onChange={e => set('email', e.target.value)}
-                      placeholder="correo@contratista.com"
-                    />
-                  </div>
-                </div>
-
-                {/* Activo */}
-                <div className="form-group">
-                  <label className="form-label">Estado</label>
-                  <div className="toggle-wrap">
-                    <button
-                      type="button"
-                      className={`toggle ${form.activo ? 'on' : 'off'}`}
-                      onClick={() => set('activo', !form.activo)}
-                      aria-label={form.activo ? 'Desactivar contratista' : 'Activar contratista'}
-                    />
-                    <span className="toggle-label">
-                      {form.activo
-                        ? 'Contratista activo — disponible en contratos'
-                        : 'Contratista inactivo — no aparece en contratos'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
-                  Cancelar
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={cargando || !!nitError}>
-                  {cargando
-                    ? <><Loader2 size={14} className="spinner" /> Guardando...</>
-                    : editId ? 'Guardar cambios' : 'Crear contratista'
-                  }
-                </button>
-              </div>
-            </form>
+          <div className="form-group">
+            <label className="form-label required" htmlFor="cont-nit">NIT / Cédula</label>
+            <input
+              id="cont-nit"
+              className={`form-input font-mono ${nitError ? 'error' : ''}`}
+              value={fm.form.nit}
+              onChange={e => handleNit(e.target.value)}
+              required placeholder="Ej: 9001234567"
+            />
+            {nitError
+              ? <span className="hint-error">{nitError}</span>
+              : <span className="form-hint">Sin puntos ni guiones — solo números</span>
+            }
           </div>
         </div>
-      )}
+
+        {/* Especialidad + Ciudad */}
+        <div className="form-grid-2 form-section-gap">
+          <div className="form-group">
+            <label className="form-label" htmlFor="cont-esp">Especialidad</label>
+            <select
+              id="cont-esp"
+              className="form-select"
+              value={fm.form.especialidad}
+              onChange={e => fm.set('especialidad', e.target.value)}
+              aria-label="Especialidad del contratista"
+            >
+              <option value="">Sin especialidad</option>
+              {especialidadesOpts.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="cont-ciudad">Ciudad</label>
+            <input
+              id="cont-ciudad"
+              className="form-input"
+              value={fm.form.ciudad}
+              onChange={e => fm.set('ciudad', e.target.value)}
+              placeholder="Ej: Bogotá"
+            />
+          </div>
+        </div>
+
+        {/* Contacto + Teléfono + Email */}
+        <div className="form-grid-3 form-section-gap">
+          <div className="form-group">
+            <label className="form-label" htmlFor="cont-contacto">Persona de contacto</label>
+            <input
+              id="cont-contacto"
+              className="form-input"
+              value={fm.form.contacto}
+              onChange={e => fm.set('contacto', e.target.value)}
+              placeholder="Nombre del contacto"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="cont-tel">Teléfono</label>
+            <input
+              id="cont-tel"
+              className="form-input"
+              value={fm.form.telefono}
+              onChange={e => fm.set('telefono', e.target.value)}
+              placeholder="Ej: 3001234567"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="cont-email">Email</label>
+            <input
+              id="cont-email"
+              type="email"
+              className="form-input"
+              value={fm.form.email}
+              onChange={e => fm.set('email', e.target.value)}
+              placeholder="correo@contratista.com"
+            />
+          </div>
+        </div>
+
+        {/* Activo */}
+        <div className="form-group">
+          <label className="form-label">Estado</label>
+          <div className="toggle-wrap">
+            <button
+              type="button"
+              className={`toggle ${fm.form.activo ? 'on' : 'off'}`}
+              onClick={() => fm.set('activo', !fm.form.activo)}
+              aria-label={fm.form.activo ? 'Desactivar contratista' : 'Activar contratista'}
+            />
+            <span className="toggle-label">
+              {fm.form.activo
+                ? 'Contratista activo — disponible en contratos'
+                : 'Contratista inactivo — no aparece en contratos'}
+            </span>
+          </div>
+        </div>
+      </FormModal>
     </MainLayout>
   )
 }

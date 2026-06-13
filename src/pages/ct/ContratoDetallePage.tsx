@@ -6,8 +6,7 @@ import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
 import {
   ArrowLeft, FileText, Play, Pause, XCircle,
-  CheckCircle2, Loader2, Check, Eye, X,
-  AlertCircle, ChevronRight
+  CheckCircle2, Loader2, Check, ChevronRight
 } from 'lucide-react'
 
 interface CTDetalle {

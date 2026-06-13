@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { useToast } from '../../context/ToastContext'
 import { useProyecto } from '../../context/ProyectoContext'  // ← agrega
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 export default function LoginPage() {
   const { login }              = useAuth()
-  const { toast }              = useToast()
   const { recargarProyectos }  = useProyecto()  // ← agrega
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')

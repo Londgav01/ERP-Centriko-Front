@@ -1,23 +1,29 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import type { FormEvent } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
-import { useToast } from '../../context/ToastContext'
-import { Plus, Pencil, Users, Loader2, AlertCircle, X, Search } from 'lucide-react'
-import { usePagination } from '../../hooks/usePagination'
-import Pagination from '../../components/ui/Pagination'
+import { Plus, Pencil, Users, Search } from 'lucide-react'
+import {
+  PageHeader, FilterBar, SelectFiltro, DataTable, FormModal, RowActions,
+} from '../../components/ui'
+import type { Columna } from '../../components/ui'
+import { useListado } from '../../hooks/useListado'
+import { useFormModal } from '../../hooks/useFormModal'
+import { useDebounce } from '../../hooks/useDebounce'
+import type { Proveedor } from '../../types'
 
-interface Proveedor {
-  proveedor_id: string; nombre: string; nit: string
-  contacto: string; telefono: string; email: string
-  ciudad: string; categoria: string; activo: number
-}
-
-const EMPTY = {
+/** Formulario vacío para crear/editar un proveedor. */
+const EMPTY_FORM = {
   nombre: '', nit: '', contacto: '', telefono: '',
-  email: '', ciudad: '', categoria: '', activo: true
+  email: '', ciudad: '', categoria: '', activo: true,
 }
 
-// Valida NIT en cliente — fix C-02
+/**
+ * Valida el NIT en cliente (fix C-02).
+ *
+ * @param nit - NIT tal como lo escribió el usuario (puede traer puntos/guiones/espacios)
+ * @returns Mensaje de error, o cadena vacía si es válido
+ */
 function validarNitCliente(nit: string): string {
   const limpio = nit.replace(/[.\-\s]/g, '')
   if (!limpio) return ''
@@ -26,116 +32,152 @@ function validarNitCliente(nit: string): string {
   return ''
 }
 
+/**
+ * Página maestra de Proveedores: búsqueda con debounce, filtros por
+ * categoría y estado, tabla paginada y formulario en modal.
+ *
+ * La lista solo se carga cuando hay un criterio (≥3 caracteres de búsqueda,
+ * categoría, o filtro de estado) para no traer todos los proveedores de entrada.
+ */
 export default function ProveedoresPage() {
-  const { toast } = useToast()
+  const { setLista, cargando: buscando, pag, cargar } =
+    useListado<Proveedor>('/api/proveedores')
 
-  const [proveedores,  setProveedores]  = useState<Proveedor[]>([])
-  const pag = usePagination(proveedores)
-  const [busqueda,     setBusqueda]     = useState('')
+  const [busqueda,        setBusqueda]        = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
-  const [filtroActivo, setFiltroActivo] = useState('')
-  const [buscando,     setBuscando]     = useState(false)
-  const [hasBuscado,   setHasBuscado]   = useState(false)
+  const [filtroActivo,    setFiltroActivo]    = useState('')
+  const [hasBuscado,      setHasBuscado]      = useState(false)
+  const [categoriasOpts,  setCategoriasOpts]  = useState<string[]>([])
+  const [nitError,        setNitError]        = useState('')
 
-  const [form,     setForm]     = useState(EMPTY)
-  const [editId,   setEditId]   = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [error,    setError]    = useState('')
-  const [nitError, setNitError] = useState('')
-  const [cargando, setCargando] = useState(false)
-  const [categoriasOpts, setCategoriasOpts] = useState<string[]>([])
+  const fm = useFormModal(EMPTY_FORM)
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
+  /** Carga el catálogo de categorías activas de tipo PROVEEDOR (una vez). */
   useEffect(() => {
     api.get('/api/categorias?tipo=PROVEEDOR&activo=1')
       .then(res => {
-        setCategoriasOpts(res.data.data.map((c: any) => c.nombre))
+        setCategoriasOpts(res.data.data.map((c: { nombre: string }) => c.nombre))
       })
       .catch(() => setCategoriasOpts([]))
   }, [])
 
+  /**
+   * Carga la lista de proveedores. Los filtros llegan como PARÁMETROS
+   * directos (patrón cargarLista del proyecto) para no depender del
+   * estado asíncrono de React.
+   *
+   * @param activo - '' | '1' | '0'
+   * @param q - Texto de búsqueda (activa la carga con ≥3 caracteres)
+   * @param cat - Categoría seleccionada
+   * @param forzar - Fuerza la carga aunque no haya criterio (filtro de estado)
+   */
   const cargarLista = async (activo = filtroActivo, q = busqueda, cat = filtroCategoria, forzar = false) => {
     const activar = forzar || q.length >= 3 || !!cat || activo !== ''
-    if (!activar) { setProveedores([]); setHasBuscado(false); return }
+    if (!activar) { setLista([]); setHasBuscado(false); return }
 
-    setBuscando(true); setHasBuscado(true)
-    try {
-      const params = new URLSearchParams()
-      if (activo !== '') params.append('activo', activo)
-      if (q)            params.append('q', q)
-      if (cat)          params.append('categoria', cat)
-      const res = await api.get(`/api/proveedores?${params}`)
-      setProveedores(res.data.data)
-      pag.reset()
-    } finally { setBuscando(false) }
+    setHasBuscado(true)
+    await cargar({ activo, q, categoria: cat })
   }
+
+  /** Búsqueda con debounce de 350 ms; pasa el texto nuevo como parámetro. */
+  const buscarDebounced = useDebounce((q: string) => {
+    cargarLista(filtroActivo, q, filtroCategoria)
+  }, 350)
 
   const handleBusqueda = (q: string) => {
     setBusqueda(q)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => cargarLista(filtroActivo, q, filtroCategoria), 350)
+    buscarDebounced(q)
   }
 
-  const set = (key: string, value: any) => setForm(s => ({ ...s, [key]: value }))
-
+  /** Actualiza el NIT en el form y su validación en vivo. */
   const handleNit = (val: string) => {
-    set('nit', val)
+    fm.set('nit', val)
     setNitError(validarNitCliente(val))
   }
 
+  /** Abre el modal en modo creación con el formulario limpio. */
   const abrirNuevo = () => {
-    setForm(EMPTY); setEditId(null)
-    setError(''); setNitError(''); setShowForm(true)
+    setNitError('')
+    fm.abrirNuevo()
   }
 
+  /** Abre el modal en modo edición con los datos del proveedor. */
   const abrirEditar = (p: Proveedor) => {
-    setForm({
+    setNitError('')
+    fm.abrirEditar(p.proveedor_id, {
       nombre: p.nombre, nit: p.nit, contacto: p.contacto || '',
       telefono: p.telefono || '', email: p.email || '',
       ciudad: p.ciudad || '', categoria: p.categoria || '',
-      activo: p.activo === 1
+      activo: p.activo === 1,
     })
-    setEditId(p.proveedor_id)
-    setError(''); setNitError(''); setShowForm(true)
   }
 
-  const guardar = async (ev: React.FormEvent) => {
+  /**
+   * Crea o actualiza el proveedor según editId. El hook maneja toast,
+   * mensaje de error de la API y cierre del modal; al guardar se recarga
+   * la lista con los filtros vigentes.
+   */
+  const guardar = async (ev: FormEvent) => {
     ev.preventDefault()
-    const nitErr = validarNitCliente(form.nit)
+    const nitErr = validarNitCliente(fm.form.nit)
     if (nitErr) { setNitError(nitErr); return }
 
-    setCargando(true); setError('')
-    try {
-      if (editId) {
-        await api.put(`/api/proveedores/${editId}`, form)
-        toast.success('Proveedor actualizado correctamente')
-      } else {
-        await api.post('/api/proveedores', form)
-        toast.success('Proveedor creado correctamente')
-      }
-      setShowForm(false)
-      cargarLista()
-    } catch (err: any) {
-      const msg = err.response?.data?.error || 'Error al guardar'
-      setError(msg); toast.error(msg)
-    } finally { setCargando(false) }
+    const ok = await fm.guardar(
+      async () => {
+        if (fm.editId) await api.put(`/api/proveedores/${fm.editId}`, fm.form)
+        else           await api.post('/api/proveedores', fm.form)
+      },
+      { exito: fm.editId ? 'Proveedor actualizado correctamente' : 'Proveedor creado correctamente' }
+    )
+    if (ok) cargarLista()
   }
+
+  /** Columnas de la tabla (mismo orden y clases que la versión anterior). */
+  const columnas: Columna<Proveedor>[] = [
+    { header: 'ID', className: 'td-id', render: p => p.proveedor_id },
+    { header: 'Razón social', className: 'td-bold', render: p => p.nombre },
+    { header: 'NIT', render: p => <span className="font-mono">{p.nit}</span> },
+    {
+      header: 'Categoría',
+      render: p => p.categoria
+        ? <span className="badge badge-info">{p.categoria}</span>
+        : <span className="td-muted">—</span>,
+    },
+    { header: 'Contacto', className: 'td-secondary', render: p => p.contacto || '—' },
+    { header: 'Teléfono', className: 'td-secondary', render: p => p.telefono || '—' },
+    { header: 'Ciudad', className: 'td-secondary', render: p => p.ciudad || '—' },
+    {
+      header: 'Estado',
+      render: p => (
+        <span className={`badge ${p.activo ? 'badge-success' : 'badge-danger'}`}>
+          {p.activo ? 'ACTIVO' : 'INACTIVO'}
+        </span>
+      ),
+    },
+    {
+      header: 'Acciones',
+      render: p => (
+        <RowActions acciones={[
+          { label: 'Editar', icon: <Pencil size={13} />, onClick: () => abrirEditar(p) },
+        ]} />
+      ),
+    },
+  ]
 
   return (
     <MainLayout>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Proveedores</h1>
-          <p className="page-subtitle">Terceros para compras de materiales y servicios</p>
-        </div>
-        <button className="btn btn-primary" onClick={abrirNuevo}>
-          <Plus size={15} /> Nuevo proveedor
-        </button>
-      </div>
+      <PageHeader
+        title="Proveedores"
+        subtitle="Terceros para compras de materiales y servicios"
+        actions={
+          <button className="btn btn-primary" onClick={abrirNuevo}>
+            <Plus size={15} /> Nuevo proveedor
+          </button>
+        }
+      />
 
       {/* Filtros */}
-      <div className="page-filters">
+      <FilterBar>
         <div className="search-bar">
           <Search size={14} />
           <input
@@ -147,241 +189,160 @@ export default function ProveedoresPage() {
           />
         </div>
 
-        <select
-          className="form-select form-select--w160"
+        <SelectFiltro
+          className="form-select--w160"
           value={filtroCategoria}
-          onChange={e => { setFiltroCategoria(e.target.value); cargarLista(filtroActivo, busqueda, e.target.value) }}
-          aria-label="Filtrar por categoría"
-        >
-          <option value="">Todas las categorías</option>
-          {categoriasOpts.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+          onChange={v => { setFiltroCategoria(v); cargarLista(filtroActivo, busqueda, v) }}
+          placeholder="Todas las categorías"
+          options={categoriasOpts.map(c => ({ value: c, label: c }))}
+          ariaLabel="Filtrar por categoría"
+        />
 
-        <select
-          className="form-select form-select--w150"
+        <SelectFiltro
+          className="form-select--w150"
           value={filtroActivo}
-          onChange={e => { const val = e.target.value; setFiltroActivo(val); cargarLista(val, busqueda, filtroCategoria, true) }}
-          aria-label="Filtrar por estado"
-        >
-          <option value="">Todos</option>
-          <option value="1">Activos</option>
-          <option value="0">Inactivos</option>
-        </select>
-      </div>
+          onChange={v => { setFiltroActivo(v); cargarLista(v, busqueda, filtroCategoria, true) }}
+          placeholder="Todos"
+          options={[
+            { value: '1', label: 'Activos' },
+            { value: '0', label: 'Inactivos' },
+          ]}
+          ariaLabel="Filtrar por estado"
+        />
+      </FilterBar>
 
       {/* Tabla */}
-      <div className="data-table-wrapper">
-        {buscando ? (
-          <div className="page-loading">
-            <Loader2 size={18} className="spinner" />
-            <span>Buscando proveedores...</span>
+      <DataTable
+        columns={columnas}
+        pag={pag}
+        rowKey={p => p.proveedor_id}
+        cargando={buscando}
+        cargandoTexto="Buscando proveedores..."
+        cargandoSize={18}
+        emptyIcon={Users}
+        emptyText={!hasBuscado
+          ? 'Escribe al menos 3 caracteres o aplica un filtro para ver proveedores'
+          : 'No se encontraron proveedores con ese criterio'}
+      />
+
+      {/* Modal crear/editar */}
+      <FormModal
+        open={fm.show}
+        title={fm.editId ? `Editar — ${fm.editId}` : 'Nuevo proveedor'}
+        onClose={fm.cerrar}
+        onSubmit={guardar}
+        className="modal-lg"
+        error={fm.error}
+        cargando={fm.cargando}
+        submitLabel={fm.editId ? 'Guardar cambios' : 'Crear proveedor'}
+        disabledSubmit={!!nitError}
+      >
+        {/* Razón social + NIT */}
+        <div className="form-grid-2 form-section-gap">
+          <div className="form-group">
+            <label className="form-label required" htmlFor="prov-nombre">Razón social</label>
+            <input
+              id="prov-nombre"
+              className="form-input"
+              value={fm.form.nombre}
+              onChange={e => fm.set('nombre', e.target.value)}
+              required placeholder="Nombre o razón social"
+            />
           </div>
-        ) : !hasBuscado ? (
-          <div className="search-empty-state">
-            <Users size={32} style={{ color: 'var(--color-text-muted)' }} />
-            <span>Escribe al menos 3 caracteres o aplica un filtro para ver proveedores</span>
-          </div>
-        ) : proveedores.length === 0 ? (
-          <div className="search-empty-state">
-            <Users size={32} style={{ color: 'var(--color-text-muted)' }} />
-            <span>No se encontraron proveedores con ese criterio</span>
-          </div>
-        ) : (
-          <>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Razón social</th>
-                  <th>NIT</th>
-                  <th>Categoría</th>
-                  <th>Contacto</th>
-                  <th>Teléfono</th>
-                  <th>Ciudad</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pag.itemsPagina.map(p => (
-                  <tr key={p.proveedor_id}>
-                    <td className="td-id">{p.proveedor_id}</td>
-                    <td className="td-bold">{p.nombre}</td>
-                    <td><span className="font-mono">{p.nit}</span></td>
-                    <td>
-                      {p.categoria
-                        ? <span className="badge badge-info">{p.categoria}</span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                    <td className="td-secondary">{p.contacto || '—'}</td>
-                    <td className="td-secondary">{p.telefono || '—'}</td>
-                    <td className="td-secondary">{p.ciudad || '—'}</td>
-                    <td>
-                      <span className={`badge ${p.activo ? 'badge-success' : 'badge-danger'}`}>
-                        {p.activo ? 'ACTIVO' : 'INACTIVO'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="table-actions">
-                        <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(p)}>
-                          <Pencil size={13} /> Editar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pagination {...pag} />
-          </>
-        )}
-      </div>
-
-      {/* Modal */}
-      {showForm && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal modal-lg">
-            <div className="modal-header">
-              <span className="modal-title">
-                {editId ? `Editar — ${editId}` : 'Nuevo proveedor'}
-              </span>
-              <button className="btn btn-ghost btn-sm modal-close-button" onClick={() => setShowForm(false)}
-                aria-label="Cerrar">
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={guardar}>
-              <div className="modal-body">
-                {error && (
-                  <div className="alert alert-error">
-                    <AlertCircle size={15} style={{ flexShrink: 0 }} />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                {/* Razón social + NIT */}
-                <div className="form-grid-2 form-section-gap">
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="prov-nombre">Razón social</label>
-                    <input
-                      id="prov-nombre"
-                      className="form-input"
-                      value={form.nombre}
-                      onChange={e => set('nombre', e.target.value)}
-                      required placeholder="Nombre o razón social"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="prov-nit">NIT / Cédula</label>
-                    <input
-                      id="prov-nit"
-                      className={`form-input font-mono ${nitError ? 'error' : ''}`}
-                      value={form.nit}
-                      onChange={e => handleNit(e.target.value)}
-                      required placeholder="Ej: 9001234567"
-                    />
-                    {nitError
-                      ? <span className="hint-error">{nitError}</span>
-                      : <span className="form-hint">Sin puntos ni guiones — solo números</span>
-                    }
-                  </div>
-                </div>
-
-                {/* Categoría + Ciudad */}
-                <div className="form-grid-2 form-section-gap">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="prov-cat">Categoría</label>
-                    <select
-                      id="prov-cat"
-                      className="form-select"
-                      value={form.categoria}
-                      onChange={e => set('categoria', e.target.value)}
-                      aria-label="Categoría del proveedor"
-                    >
-                      <option value="">Sin categoría</option>
-                      {categoriasOpts.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="prov-ciudad">Ciudad</label>
-                    <input
-                      id="prov-ciudad"
-                      className="form-input"
-                      value={form.ciudad}
-                      onChange={e => set('ciudad', e.target.value)}
-                      placeholder="Ej: Medellín"
-                    />
-                  </div>
-                </div>
-
-                {/* Contacto + Teléfono + Email */}
-                <div className="form-grid-3 form-section-gap">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="prov-contacto">Persona de contacto</label>
-                    <input
-                      id="prov-contacto"
-                      className="form-input"
-                      value={form.contacto}
-                      onChange={e => set('contacto', e.target.value)}
-                      placeholder="Nombre del contacto"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="prov-tel">Teléfono</label>
-                    <input
-                      id="prov-tel"
-                      className="form-input"
-                      value={form.telefono}
-                      onChange={e => set('telefono', e.target.value)}
-                      placeholder="Ej: 3001234567"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="prov-email">Email</label>
-                    <input
-                      id="prov-email"
-                      type="email"
-                      className="form-input"
-                      value={form.email}
-                      onChange={e => set('email', e.target.value)}
-                      placeholder="correo@proveedor.com"
-                    />
-                  </div>
-                </div>
-
-                {/* Activo */}
-                <div className="form-group">
-                  <label className="form-label">Estado</label>
-                  <div className="toggle-wrap">
-                    <button
-                      type="button"
-                      className={`toggle ${form.activo ? 'on' : 'off'}`}
-                      onClick={() => set('activo', !form.activo)}
-                      aria-label={form.activo ? 'Desactivar proveedor' : 'Activar proveedor'}
-                    />
-                    <span className="toggle-label">
-                      {form.activo ? 'Proveedor activo — aparece en cotizaciones' : 'Proveedor inactivo — no aparece en cotizaciones'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
-                  Cancelar
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={cargando || !!nitError}>
-                  {cargando
-                    ? <><Loader2 size={14} className="spinner" /> Guardando...</>
-                    : editId ? 'Guardar cambios' : 'Crear proveedor'
-                  }
-                </button>
-              </div>
-            </form>
+          <div className="form-group">
+            <label className="form-label required" htmlFor="prov-nit">NIT / Cédula</label>
+            <input
+              id="prov-nit"
+              className={`form-input font-mono ${nitError ? 'error' : ''}`}
+              value={fm.form.nit}
+              onChange={e => handleNit(e.target.value)}
+              required placeholder="Ej: 9001234567"
+            />
+            {nitError
+              ? <span className="hint-error">{nitError}</span>
+              : <span className="form-hint">Sin puntos ni guiones — solo números</span>
+            }
           </div>
         </div>
-      )}
+
+        {/* Categoría + Ciudad */}
+        <div className="form-grid-2 form-section-gap">
+          <div className="form-group">
+            <label className="form-label" htmlFor="prov-cat">Categoría</label>
+            <select
+              id="prov-cat"
+              className="form-select"
+              value={fm.form.categoria}
+              onChange={e => fm.set('categoria', e.target.value)}
+              aria-label="Categoría del proveedor"
+            >
+              <option value="">Sin categoría</option>
+              {categoriasOpts.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="prov-ciudad">Ciudad</label>
+            <input
+              id="prov-ciudad"
+              className="form-input"
+              value={fm.form.ciudad}
+              onChange={e => fm.set('ciudad', e.target.value)}
+              placeholder="Ej: Medellín"
+            />
+          </div>
+        </div>
+
+        {/* Contacto + Teléfono + Email */}
+        <div className="form-grid-3 form-section-gap">
+          <div className="form-group">
+            <label className="form-label" htmlFor="prov-contacto">Persona de contacto</label>
+            <input
+              id="prov-contacto"
+              className="form-input"
+              value={fm.form.contacto}
+              onChange={e => fm.set('contacto', e.target.value)}
+              placeholder="Nombre del contacto"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="prov-tel">Teléfono</label>
+            <input
+              id="prov-tel"
+              className="form-input"
+              value={fm.form.telefono}
+              onChange={e => fm.set('telefono', e.target.value)}
+              placeholder="Ej: 3001234567"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="prov-email">Email</label>
+            <input
+              id="prov-email"
+              type="email"
+              className="form-input"
+              value={fm.form.email}
+              onChange={e => fm.set('email', e.target.value)}
+              placeholder="correo@proveedor.com"
+            />
+          </div>
+        </div>
+
+        {/* Activo */}
+        <div className="form-group">
+          <label className="form-label">Estado</label>
+          <div className="toggle-wrap">
+            <button
+              type="button"
+              className={`toggle ${fm.form.activo ? 'on' : 'off'}`}
+              onClick={() => fm.set('activo', !fm.form.activo)}
+              aria-label={fm.form.activo ? 'Desactivar proveedor' : 'Activar proveedor'}
+            />
+            <span className="toggle-label">
+              {fm.form.activo ? 'Proveedor activo — aparece en cotizaciones' : 'Proveedor inactivo — no aparece en cotizaciones'}
+            </span>
+          </div>
+        </div>
+      </FormModal>
     </MainLayout>
   )
 }
