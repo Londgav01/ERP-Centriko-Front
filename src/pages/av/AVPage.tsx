@@ -91,9 +91,9 @@ export default function AVPage() {
   const [cargandoPagina, setCargandoPagina] = useState(true)
   const pag = usePagination(lista)
 
-  const ctDisponiblesActivos = proyecto?.proyecto_id
-    ? ctDisponibles.filter(ct => ct.proyecto_id === proyecto.proyecto_id)
-    : ctDisponibles
+  // El backend ya filtra por proyecto vía ?proyecto_id= en /ct-disponibles/lista.
+  // Filtrar de nuevo aquí es redundante y rompía la lista (el endpoint no devuelve proyecto_id).
+  const ctDisponiblesActivos = ctDisponibles
 
   useEffect(() => {
     if (proyecto) cargarLista().finally(() => setCargandoPagina(false))
