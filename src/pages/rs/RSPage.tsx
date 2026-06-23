@@ -1,85 +1,56 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import MainLayout from '../../components/layout/MainLayout'
 import { api } from '../../lib/api'
 import { useToast } from '../../context/ToastContext'
-import { useAuth } from '../../context/AuthContext'
 import { useProyecto } from '../../context/ProyectoContext'
-import AlertaProyecto from '../../components/ui/AlertaProyecto'
+import { Plus, FileText, AlertCircle, Check, Eye } from 'lucide-react'
 import {
-  Plus, FileText, Loader2, AlertCircle, X,
-  Search, Trash2, Check, XCircle, Eye
-} from 'lucide-react'
-import NumericInput from '../../components/ui/NumericInput'
+  PageHeader, FilterBar, SelectFiltro, DataTable, ConfirmModal, EstadoBadge,
+  AlertaProyecto, LoadingState, RowActions,
+} from '../../components/ui'
+import type { Columna } from '../../components/ui'
+import { useListado } from '../../hooks/useListado'
+import { useFormModal } from '../../hooks/useFormModal'
+import { useCascadaUbicacion } from '../../hooks/useCascadaUbicacion'
+import { usePermisos } from '../../hooks/usePermisos'
+import { fmtFecha } from '../../utils/formato'
+import { getApiError } from '../../utils/errores'
+import { ESTADOS_RS } from '../../lib/constantes'
+import type { RS, RSDetalle, Proyecto, Edificacion, Capitulo, Material } from '../../types'
+import RSFormModal, { EMPTY_RS_FORM } from './RSFormModal'
+import type { RSForm, ItemRS, UltimoPrecio } from './RSFormModal'
+import RSDetalleModal from './RSDetalleModal'
 import './RSPage.css'
-import { usePagination } from '../../hooks/usePagination'
-import Pagination from '../../components/ui/Pagination'
 
-interface Proyecto    { proyecto_id: string; nombre: string }
-interface Edificacion { edificio_id: string; nombre: string; proyecto_id: string }
-interface Capitulo    { capitulo_id: string; nombre_capitulo: string; edificio_id: string; codigo: string }
-interface Material    { material_id: string; nombre: string; unidad: string; codigo: string }
-
-interface ItemRS {
-  material_id: string; nombre_material: string
-  unidad: string; cantidad_solicitada: number; notas: string
-}
-
-interface RS {
-  rs_id: string; estado: string; prioridad: string
-  nombre_proyecto: string; nombre_edificio: string; nombre_capitulo: string
-  solicitante: string; fecha_solicitud: string; descripcion: string
-  proyecto_id: string
-}
-
-interface RSDetalle {
-  det_id: string; material_id: string; nombre_material: string
-  unidad: string; cantidad_solicitada: number; cantidad_aprobada: number; notas: string
-}
-
-const fmtCOP = (v: number) => new Intl.NumberFormat('es-CO', {
-  style: 'currency', currency: 'COP', maximumFractionDigits: 0
-}).format(v || 0)
-
-const PRIORIDADES = ['BAJA','MEDIA','ALTA','URGENTE']
-const ESTADOS     = ['BORRADOR','APROBADA','EN_PROCESO','COMPLETADA','RECHAZADA','ANULADA']
-
-const BADGE_ESTADO: Record<string, string> = {
-  BORRADOR:   'badge-neutral',  APROBADA:   'badge-success',
-  EN_PROCESO: 'badge-info',     COMPLETADA: 'badge-success',
-  RECHAZADA:  'badge-danger',   ANULADA:    'badge-danger',
-}
-const BADGE_PRIORIDAD: Record<string, string> = {
-  BAJA: 'badge-neutral', MEDIA: 'badge-info',
-  ALTA: 'badge-warning', URGENTE: 'badge-danger',
-}
-
-const EMPTY_FORM = {
-  proyecto_id: '', edificio_id: '', capitulo_id: '',
-  descripcion: '', prioridad: 'MEDIA', notas: ''
-}
-
+/**
+ * Página de Requisiciones de Materiales (contenedor). Orquesta la lista
+ * paginada, los catálogos para la cascada Proyecto → Edificación → Capítulo,
+ * el modal de creación con ítems y el modal de detalle/aprobación.
+ */
 export default function RSPage() {
-  const { toast }   = useToast()
-  const { usuario } = useAuth()
+  const { toast } = useToast()
   const { proyecto } = useProyecto()
+  const { es, esAlguno } = usePermisos()
 
-  const [lista,         setLista]         = useState<RS[]>([])
-  const pag = usePagination(lista)
+  const { lista, setLista, pag, cargar } = useListado<RS>('/api/rs')
+  const [cargandoPagina, setCargandoPagina] = useState(true)
+
+  // Catálogos para la cascada del formulario
   const [proyectos,     setProyectos]     = useState<Proyecto[]>([])
   const [edificaciones, setEdificaciones] = useState<Edificacion[]>([])
   const [capitulos,     setCapitulos]     = useState<Capitulo[]>([])
-  const [edifModal,     setEdifModal]     = useState<Edificacion[]>([])
-  const [capModal,      setCapModal]      = useState<Capitulo[]>([])
+  const cascada = useCascadaUbicacion(edificaciones, capitulos)
 
   const [filtroEstado,   setFiltroEstado]   = useState('')
   const [filtroProyecto, setFiltroProyecto] = useState('')
 
-  const [showForm,  setShowForm]  = useState(false)
-  const [form,      setForm]      = useState(EMPTY_FORM)
-  const [items,     setItems]     = useState<ItemRS[]>([])
-  const [error,     setError]     = useState('')
-  const [cargando,  setCargando]  = useState(false)
+  // Formulario de nueva RS + sus ítems
+  const fm = useFormModal<RSForm>(EMPTY_RS_FORM)
+  const [items, setItems] = useState<ItemRS[]>([])
+  const [ultimosPrecios, setUltimosPrecios] = useState<Record<string, UltimoPrecio>>({})
 
+  // Modal detalle / aprobación
   const [showDetalle,   setShowDetalle]   = useState(false)
   const [rsDetalle,     setRsDetalle]     = useState<RS | null>(null)
   const [detalleItems,  setDetalleItems]  = useState<RSDetalle[]>([])
@@ -87,15 +58,12 @@ export default function RSPage() {
   const [modoAprobar,   setModoAprobar]   = useState(false)
   const [cantAprobadas, setCantAprobadas] = useState<Record<string, number>>({})
   const [notasAprobar,  setNotasAprobar]  = useState('')
+  const [procesando,    setProcesando]    = useState(false)
 
-  const [matBusqueda,    setMatBusqueda]    = useState<Record<number, string>>({})
-  const [matSugerencias, setMatSugerencias] = useState<Record<number, Material[]>>({})
-  const [matAbierto,     setMatAbierto]     = useState<number | null>(null)
-  const debMatRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
-  const [ultimosPrecios, setUltimosPrecios] = useState<Record<string, any>>({})
+  // Confirmación de rechazo/anulación (reemplaza el confirm() nativo)
+  const [confirmAccion, setConfirmAccion] = useState<{ rsId: string; accion: 'rechazar' | 'anular' } | null>(null)
 
-  const [cargandoPagina, setCargandoPagina] = useState(true)
-
+  /** Carga inicial: requisiciones + catálogos en una sola tanda. */
   useEffect(() => {
     Promise.all([
       api.get('/api/rs'),
@@ -111,49 +79,53 @@ export default function RSPage() {
     }).finally(() => setCargandoPagina(false))
   }, [])
 
-  const cargarLista = async (estado = filtroEstado, proyId = filtroProyecto) => {
-    const params = new URLSearchParams()
-    if (estado) params.append('estado', estado)
-    if (proyId) params.append('proyecto_id', proyId)
-    const res = await api.get(`/api/rs?${params}`)
-    setLista(res.data.data)
-    pag.reset()
+  /**
+   * Recarga la lista. Los filtros llegan como PARÁMETROS directos
+   * (patrón cargarLista del proyecto).
+   *
+   * @param estado - Estado de la requisición ('' = todos)
+   * @param proyId - Proyecto ('' = todos)
+   */
+  const cargarLista = (estado = filtroEstado, proyId = filtroProyecto) =>
+    cargar({ estado, proyecto_id: proyId })
+
+  // ── Cascada Proyecto → Edificación → Capítulo ─────────────
+  /** Cambia el proyecto del form y limpia edificación/capítulo. */
+  const onProyecto = (proyId: string) => {
+    fm.set('proyecto_id', proyId); fm.set('edificio_id', ''); fm.set('capitulo_id', '')
+    cascada.alCambiarProyecto(proyId)
+  }
+  /** Cambia la edificación del form y limpia el capítulo. */
+  const onEdificio = (edifId: string) => {
+    fm.set('edificio_id', edifId); fm.set('capitulo_id', '')
+    cascada.alCambiarEdificio(edifId)
   }
 
-  const set = (key: string, val: any) => setForm(s => ({ ...s, [key]: val }))
-
-  const handleProyecto = (proyId: string) => {
-    set('proyecto_id', proyId); set('edificio_id', ''); set('capitulo_id', '')
-    setEdifModal(edificaciones.filter(e => e.proyecto_id === proyId))
-    setCapModal([])
+  /** Abre el modal de creación, precargando el proyecto activo si existe. */
+  const abrirNuevo = () => {
+    setItems([])
+    cascada.reset()
+    fm.abrirNuevo({ proyecto_id: proyecto?.proyecto_id || '' })
+    if (proyecto?.proyecto_id) onProyecto(proyecto.proyecto_id)
   }
 
-  const handleEdificio = (edifId: string) => {
-    set('edificio_id', edifId); set('capitulo_id', '')
-    setCapModal(capitulos.filter(c => c.edificio_id === edifId))
-  }
+  // ── Ítems del formulario ──────────────────────────────────
+  /** Agrega una fila de ítem vacía. */
+  const agregarItem = () =>
+    setItems(s => [...s, { material_id: '', nombre_material: '', unidad: '', cantidad_solicitada: 0, notas: '' }])
 
-  // ── Autocomplete materiales (fix C-05) ─────────────────────
-  const buscarMaterial = (idx: number, q: string) => {
-    setMatBusqueda(s => ({ ...s, [idx]: q }))
-    if (debMatRef.current[idx]) clearTimeout(debMatRef.current[idx])
-    if (q.length < 1) { setMatSugerencias(s => ({ ...s, [idx]: [] })); return }
-    debMatRef.current[idx] = setTimeout(async () => {
-      try {
-        const res = await api.get(`/api/materiales?q=${encodeURIComponent(q)}&activo=1`)
-        setMatSugerencias(s => ({ ...s, [idx]: res.data.data }))
-        if (res.data.data.length > 0) setMatAbierto(idx)
-      } catch { /* silencioso */ }
-    }, 300)
-  }
+  /** Elimina la fila de ítem indicada. */
+  const eliminarItem = (idx: number) => setItems(s => s.filter((_, i) => i !== idx))
 
-  const seleccionarMaterial = (idx: number, mat: Material) => {
-    const nuevos = [...items]
-    nuevos[idx] = { ...nuevos[idx], material_id: mat.material_id, nombre_material: mat.nombre, unidad: mat.unidad }
-    setItems(nuevos)
-    setMatBusqueda(s => ({ ...s, [idx]: mat.nombre }))
-    setMatSugerencias(s => ({ ...s, [idx]: [] }))
-    setMatAbierto(null)
+  /** Actualiza un campo de un ítem. */
+  const actualizarItem = (idx: number, key: keyof ItemRS, val: string | number) =>
+    setItems(s => s.map((it, i) => (i === idx ? { ...it, [key]: val } : it)))
+
+  /** Asigna el material a un ítem y carga su último precio (una sola vez). */
+  const onSelectMaterial = (idx: number, mat: Material) => {
+    setItems(s => s.map((it, i) =>
+      i === idx ? { ...it, material_id: mat.material_id, nombre_material: mat.nombre, unidad: mat.unidad } : it
+    ))
     if (!ultimosPrecios[mat.material_id]) {
       api.get(`/api/rs/ultimo-precio/${mat.material_id}`)
         .then(res => { if (res.data.data) setUltimosPrecios(s => ({ ...s, [mat.material_id]: res.data.data })) })
@@ -161,50 +133,30 @@ export default function RSPage() {
     }
   }
 
-  const agregarItem = () => {
-    const idx = items.length
-    setItems(s => [...s, { material_id: '', nombre_material: '', unidad: '', cantidad_solicitada: 0, notas: '' }])
-    setMatBusqueda(s => ({ ...s, [idx]: '' }))
-    setMatSugerencias(s => ({ ...s, [idx]: [] }))
-  }
-
-  const eliminarItem = (idx: number) => {
-    setItems(s => s.filter((_, i) => i !== idx))
-    setMatBusqueda(s => { const n = { ...s }; delete n[idx]; return n })
-    setMatSugerencias(s => { const n = { ...s }; delete n[idx]; return n })
-  }
-
-  const actualizarItem = (idx: number, key: string, val: any) => {
-    const nuevos = [...items]
-    nuevos[idx] = { ...nuevos[idx], [key]: val }
-    setItems(nuevos)
-  }
-
-  const guardar = async (ev: React.FormEvent) => {
+  /** Valida los ítems y crea la requisición. */
+  const guardar = async (ev: FormEvent) => {
     ev.preventDefault()
-    if (items.length === 0) { setError('Debe agregar al menos un material'); return }
+    if (items.length === 0) { fm.setError('Debe agregar al menos un material'); return }
     for (const item of items) {
-      if (!item.material_id)    { setError('Todos los ítems deben tener un material seleccionado'); return }
-      if (!item.cantidad_solicitada || item.cantidad_solicitada <= 0)
-                                 { setError('Todos los ítems deben tener cantidad mayor a cero'); return }
+      if (!item.material_id) { fm.setError('Todos los ítems deben tener un material seleccionado'); return }
+      if (!item.cantidad_solicitada || item.cantidad_solicitada <= 0) {
+        fm.setError('Todos los ítems deben tener cantidad mayor a cero'); return
+      }
     }
-    setCargando(true); setError('')
-    try {
-      await api.post('/api/rs', { ...form, items })
-      toast.success('Requisición creada correctamente')
-      setShowForm(false); setItems([]); setForm(EMPTY_FORM)
-      cargarLista()
-    } catch (err: any) {
-      const msg = err.response?.data?.error || 'Error al guardar'
-      setError(msg); toast.error(msg)
-    } finally { setCargando(false) }
+    const ok = await fm.guardar(
+      async () => { await api.post('/api/rs', { ...fm.form, items }) },
+      { exito: 'Requisición creada correctamente' }
+    )
+    if (ok) { setItems([]); cargarLista() }
   }
 
+  // ── Detalle / aprobación ──────────────────────────────────
+  /** Abre el modal de detalle (o de aprobación) de una requisición. */
   const verDetalle = async (rsId: string, aprobar = false) => {
     setCargandoDet(true); setShowDetalle(true)
     setModoAprobar(aprobar); setNotasAprobar('')
     try {
-      const res  = await api.get(`/api/rs/${rsId}`)
+      const res = await api.get(`/api/rs/${rsId}`)
       const data = res.data.data
       setRsDetalle(data); setDetalleItems(data.detalle)
       const aprobadas: Record<string, number> = {}
@@ -215,52 +167,82 @@ export default function RSPage() {
     } finally { setCargandoDet(false) }
   }
 
+  /** Aprueba la requisición con las cantidades ajustadas. */
   const aprobar = async () => {
-    setCargando(true)
+    setProcesando(true)
     try {
       const items_aprobados = detalleItems.map(d => ({
         det_id: d.det_id,
-        cantidad_aprobada: cantAprobadas[d.det_id] ?? d.cantidad_solicitada
+        cantidad_aprobada: cantAprobadas[d.det_id] ?? d.cantidad_solicitada,
       }))
       await api.put(`/api/rs/${rsDetalle?.rs_id}/aprobar`, { items_aprobados, notas: notasAprobar })
       toast.success('Requisición aprobada')
       setShowDetalle(false); cargarLista()
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Error al aprobar')
-    } finally { setCargando(false) }
+    } catch (err) {
+      toast.error(getApiError(err, 'Error al aprobar'))
+    } finally { setProcesando(false) }
   }
 
-  const cambiarEstado = async (rsId: string, accion: 'rechazar' | 'anular') => {
-    if (!confirm(accion === 'rechazar' ? '¿Rechazar esta requisición?' : '¿Anular esta requisición?')) return
+  /** Ejecuta el rechazo/anulación confirmado en el ConfirmModal. */
+  const confirmarAccion = async () => {
+    if (!confirmAccion) return
+    setProcesando(true)
     try {
-      await api.put(`/api/rs/${rsId}/${accion}`, {})
-      toast.success(accion === 'rechazar' ? 'Requisición rechazada' : 'Requisición anulada')
-      setShowDetalle(false); cargarLista()
-    } catch (err: any) { toast.error(err.response?.data?.error || 'Error') }
+      await api.put(`/api/rs/${confirmAccion.rsId}/${confirmAccion.accion}`, {})
+      toast.success(confirmAccion.accion === 'rechazar' ? 'Requisición rechazada' : 'Requisición anulada')
+      setConfirmAccion(null); setShowDetalle(false); cargarLista()
+    } catch (err) {
+      toast.error(getApiError(err, 'Error'))
+    } finally { setProcesando(false) }
   }
 
-  const puedeCrear   = ['ADMIN','COORDINADOR','ING_RESIDENTE'].includes(usuario?.rol || '')
-  const puedeAprobar = ['ADMIN','COORDINADOR'].includes(usuario?.rol || '')
-  const soloLectura  = usuario?.rol === 'ALMACENISTA'
+  const puedeCrear   = esAlguno('ADMIN', 'COORDINADOR', 'ING_RESIDENTE')
+  const puedeAprobar = esAlguno('ADMIN', 'COORDINADOR')
+  const soloLectura  = es('ALMACENISTA')
+
+  /** Columnas de la tabla (mismo orden y clases que la versión anterior). */
+  const columnas: Columna<RS>[] = [
+    { header: 'RS ID', className: 'td-id', render: r => r.rs_id },
+    {
+      header: 'Proyecto / Capítulo',
+      render: r => (
+        <>
+          <span className="td-bold">{r.nombre_proyecto}</span>
+          <span className="td-muted rs-block-muted">{r.nombre_capitulo}</span>
+        </>
+      ),
+    },
+    { header: 'Solicitante', className: 'td-secondary', render: r => r.solicitante },
+    { header: 'Prioridad', render: r => <EstadoBadge estado={r.prioridad} tipo="prioridad" /> },
+    { header: 'Fecha', className: 'td-secondary', render: r => fmtFecha(r.fecha_solicitud) },
+    { header: 'Estado', render: r => <EstadoBadge estado={r.estado} tipo="rs" /> },
+    {
+      header: 'Acciones',
+      render: r => (
+        <RowActions acciones={[
+          { label: 'Ver', icon: <Eye size={13} />, onClick: () => verDetalle(r.rs_id) },
+          {
+            label: 'Aprobar', icon: <Check size={13} />, className: 'rs-success-action',
+            visible: puedeAprobar && r.estado === 'BORRADOR',
+            onClick: () => verDetalle(r.rs_id, true),
+          },
+        ]} />
+      ),
+    },
+  ]
 
   return (
     <MainLayout>
       <AlertaProyecto />
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Requisiciones de Materiales</h1>
-          <p className="page-subtitle">{lista.length} requisición{lista.length !== 1 ? 'es' : ''}</p>
-        </div>
-        {puedeCrear && (
-          <button className="btn btn-primary" onClick={() => {
-            setForm({ ...EMPTY_FORM, proyecto_id: proyecto?.proyecto_id || '' }); setItems([]); setError('')
-            setEdifModal([]); setCapModal([]); setShowForm(true)
-            if (proyecto?.proyecto_id) handleProyecto(proyecto.proyecto_id)
-          }}>
+      <PageHeader
+        title="Requisiciones de Materiales"
+        subtitle={`${lista.length} requisición${lista.length !== 1 ? 'es' : ''}`}
+        actions={puedeCrear && (
+          <button className="btn btn-primary" onClick={abrirNuevo}>
             <Plus size={15} /> Nueva requisición
           </button>
         )}
-      </div>
+      />
 
       {soloLectura && (
         <div className="alert alert-info rs-readonly-alert">
@@ -269,366 +251,87 @@ export default function RSPage() {
         </div>
       )}
 
-      <div className="page-filters">
-        <select className="form-select rs-filter-select--estado" value={filtroEstado}
-          onChange={e => { setFiltroEstado(e.target.value); cargarLista(e.target.value, filtroProyecto) }}
-          aria-label="Filtrar por estado">
-          <option value="">Todos los estados</option>
-          {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
-        </select>
-        <select className="form-select rs-filter-select--proyecto" value={filtroProyecto}
-          onChange={e => { setFiltroProyecto(e.target.value); cargarLista(filtroEstado, e.target.value) }}
-          aria-label="Filtrar por proyecto">
-          <option value="">Todos los proyectos</option>
-          {proyectos.map(p => <option key={p.proyecto_id} value={p.proyecto_id}>{p.proyecto_id} — {p.nombre}</option>)}
-        </select>
-      </div>
+      <FilterBar>
+        <SelectFiltro
+          className="rs-filter-select--estado"
+          value={filtroEstado}
+          onChange={v => { setFiltroEstado(v); cargarLista(v, filtroProyecto) }}
+          placeholder="Todos los estados"
+          options={ESTADOS_RS.map(e => ({ value: e, label: e }))}
+          ariaLabel="Filtrar por estado"
+        />
+        <SelectFiltro
+          className="rs-filter-select--proyecto"
+          value={filtroProyecto}
+          onChange={v => { setFiltroProyecto(v); cargarLista(filtroEstado, v) }}
+          placeholder="Todos los proyectos"
+          options={proyectos.map(p => ({ value: p.proyecto_id, label: `${p.proyecto_id} — ${p.nombre}` }))}
+          ariaLabel="Filtrar por proyecto"
+        />
+      </FilterBar>
 
       {cargandoPagina ? (
-        <div className="page-loading"><Loader2 size={20} className="spinner" /><span>Cargando...</span></div>
+        <LoadingState texto="Cargando..." />
       ) : (
-        <div className="data-table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>RS ID</th><th>Proyecto / Capítulo</th><th>Solicitante</th>
-                <th>Prioridad</th><th>Fecha</th><th>Estado</th><th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lista.length === 0 ? (
-                <tr><td colSpan={7}>
-                  <div className="search-empty-state">
-                    <FileText size={32} className="rs-muted-icon" />
-                    <span>No hay requisiciones registradas</span>
-                  </div>
-                </td></tr>
-              ) : (
-                <>
-                  {pag.itemsPagina.map(r => (
-                    <tr key={r.rs_id}>
-                  <td className="td-id">{r.rs_id}</td>
-                  <td>
-                    <span className="td-bold">{r.nombre_proyecto}</span>
-                    <span className="td-muted rs-block-muted">{r.nombre_capitulo}</span>
-                  </td>
-                  <td className="td-secondary">{r.solicitante}</td>
-                  <td><span className={`badge ${BADGE_PRIORIDAD[r.prioridad] || 'badge-neutral'}`}>{r.prioridad}</span></td>
-                  <td className="td-secondary">{new Date(r.fecha_solicitud + 'T00:00:00').toLocaleDateString('es-CO')}</td>
-                  <td><span className={`badge ${BADGE_ESTADO[r.estado] || 'badge-neutral'}`}>{r.estado}</span></td>
-                  <td>
-                    <div className="table-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => verDetalle(r.rs_id)}>
-                        <Eye size={13} /> Ver
-                      </button>
-                      {puedeAprobar && r.estado === 'BORRADOR' && (
-                        <button className="btn btn-ghost btn-sm rs-success-action" onClick={() => verDetalle(r.rs_id, true)}>
-                          <Check size={13} /> Aprobar
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                    </tr>
-                  ))}
-                </>
-              )}
-            </tbody>
-          </table>
-          <Pagination {...pag} />
-        </div>
+        <DataTable
+          columns={columnas}
+          pag={pag}
+          rowKey={r => r.rs_id}
+          emptyIcon={FileText}
+          emptyText="No hay requisiciones registradas"
+          emptyEnFila
+        />
       )}
 
-      {/* ── Modal nueva RS ─────────────────────────────────── */}
-      {showForm && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal rs-modal-wide">
-            <div className="modal-header">
-              <span className="modal-title">Nueva requisición de materiales</span>
-              <button className="btn btn-ghost btn-sm rs-icon-close" onClick={() => setShowForm(false)}
-                aria-label="Cerrar"><X size={16} /></button>
-            </div>
+      <RSFormModal
+        open={fm.show}
+        onClose={fm.cerrar}
+        onSubmit={guardar}
+        error={fm.error}
+        cargando={fm.cargando}
+        form={fm.form}
+        set={fm.set}
+        proyectos={proyectos}
+        edifFiltradas={cascada.edifFiltradas}
+        capFiltrados={cascada.capFiltrados}
+        onProyecto={onProyecto}
+        onEdificio={onEdificio}
+        items={items}
+        agregarItem={agregarItem}
+        eliminarItem={eliminarItem}
+        actualizarItem={actualizarItem}
+        onSelectMaterial={onSelectMaterial}
+        ultimosPrecios={ultimosPrecios}
+      />
 
-            <form onSubmit={guardar}>
-              <div className="modal-body">
-                {error && (
-                  <div className="alert alert-error">
-                    <AlertCircle size={15} style={{ flexShrink: 0 }} /><span>{error}</span>
-                  </div>
-                )}
+      <RSDetalleModal
+        open={showDetalle}
+        onClose={() => setShowDetalle(false)}
+        cargando={cargandoDet}
+        rs={rsDetalle}
+        items={detalleItems}
+        modoAprobar={modoAprobar}
+        cantAprobadas={cantAprobadas}
+        setCantAprobada={(detId, val) => setCantAprobadas(s => ({ ...s, [detId]: val }))}
+        notasAprobar={notasAprobar}
+        setNotasAprobar={setNotasAprobar}
+        onAprobar={aprobar}
+        onRechazar={() => rsDetalle && setConfirmAccion({ rsId: rsDetalle.rs_id, accion: 'rechazar' })}
+        onAnular={() => rsDetalle && setConfirmAccion({ rsId: rsDetalle.rs_id, accion: 'anular' })}
+        procesando={procesando}
+        puedeAprobar={puedeAprobar}
+      />
 
-                <div className="form-grid-3 rs-grid-gap">
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="rs-proy">Proyecto</label>
-                    <select id="rs-proy" className="form-select" value={form.proyecto_id}
-                      onChange={e => handleProyecto(e.target.value)} required aria-label="Proyecto">
-                      <option value="">Selecciona...</option>
-                      {proyectos.map(p => <option key={p.proyecto_id} value={p.proyecto_id}>{p.nombre}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="rs-edif">Edificación</label>
-                    <select id="rs-edif" className="form-select" value={form.edificio_id}
-                      onChange={e => handleEdificio(e.target.value)}
-                      required disabled={!form.proyecto_id} aria-label="Edificación">
-                      <option value="">{!form.proyecto_id ? 'Primero elige proyecto' : 'Selecciona...'}</option>
-                      {edifModal.map(e => <option key={e.edificio_id} value={e.edificio_id}>{e.nombre}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="rs-cap">Capítulo</label>
-                    <select id="rs-cap" className="form-select" value={form.capitulo_id}
-                      onChange={e => set('capitulo_id', e.target.value)}
-                      required disabled={!form.edificio_id} aria-label="Capítulo">
-                      <option value="">{!form.edificio_id ? 'Primero elige edificación' : 'Selecciona...'}</option>
-                      {capModal.map(c => <option key={c.capitulo_id} value={c.capitulo_id}>{c.codigo} — {c.nombre_capitulo}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-grid-2 rs-grid-gap">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="rs-desc">Descripción general</label>
-                    <input id="rs-desc" className="form-input" value={form.descripcion}
-                      onChange={e => set('descripcion', e.target.value)}
-                      placeholder="Resumen de lo que se solicita" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required" htmlFor="rs-prior">Prioridad</label>
-                    <select id="rs-prior" className="form-select" value={form.prioridad}
-                      onChange={e => set('prioridad', e.target.value)} aria-label="Prioridad">
-                      {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="rs-items-header">
-                  <label className="form-label rs-items-label">Materiales solicitados</label>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={agregarItem}>
-                    <Plus size={13} /> Agregar material
-                  </button>
-                </div>
-
-                {items.length === 0 ? (
-                  <div className="alert alert-info rs-grid-gap">
-                    <AlertCircle size={15} className="rs-no-shrink" />
-                    <span>Haz clic en "Agregar material" para comenzar</span>
-                  </div>
-                ) : (
-                  <div className="rs-items-table-wrapper">
-                    <table className="rs-items-table">
-                      <thead>
-                        <tr>
-                          <th className="rs-th-material">Material</th>
-                          <th className="rs-th-unidad">Unidad</th>
-                          <th className="rs-th-cantidad">Cantidad</th>
-                          <th className="rs-th-notas">Notas</th>
-                          <th className="rs-th-precio">Último precio</th>
-                          <th className="rs-th-actions" aria-label="Acciones"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, idx) => (
-                          <tr key={idx}>
-                            <td className="rs-autocomplete-cell">
-                              <div className="rs-autocomplete-search">
-                                <Search size={12} />
-                                <input
-                                  className="form-input rs-autocomplete-input"
-                                  value={matBusqueda[idx] || ''}
-                                  onChange={e => buscarMaterial(idx, e.target.value)}
-                                  placeholder="Buscar material..."
-                                  aria-label={`Material ${idx + 1}`}
-                                  onBlur={() => setTimeout(() => setMatAbierto(null), 200)}
-                                />
-                              </div>
-                              {matAbierto === idx && (matSugerencias[idx] || []).length > 0 && (
-                                <div className="rs-autocomplete-menu">
-                                  {matSugerencias[idx].map(mat => (
-                                    <button key={mat.material_id} type="button"
-                                      onMouseDown={() => seleccionarMaterial(idx, mat)}
-                                      className="rs-autocomplete-option">
-                                      <span className="font-mono rs-autocomplete-code">{mat.codigo}</span>
-                                      {mat.nombre}
-                                      <span className="rs-autocomplete-unidad">({mat.unidad})</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </td>
-                            <td className="rs-td-unidad">
-                              <span className="badge badge-neutral">{item.unidad || '—'}</span>
-                            </td>
-                            <td>
-                              <NumericInput
-                                value={item.cantidad_solicitada}
-                                onChange={val => actualizarItem(idx, 'cantidad_solicitada', val)}
-                                decimals={2} required
-                              />
-                            </td>
-                            <td>
-                              <input className="form-input rs-notes-input"
-                                value={item.notas} placeholder="Observación"
-                                onChange={e => actualizarItem(idx, 'notas', e.target.value)}
-                                aria-label={`Notas ítem ${idx + 1}`} />
-                            </td>
-                            <td className="rs-th-precio">
-                              {ultimosPrecios[item.material_id] ? (
-                                <div>
-                                  <span className="rs-precio-valor">
-                                    {fmtCOP(ultimosPrecios[item.material_id].precio_unitario)}
-                                  </span>
-                                  <span className="td-muted rs-precio-proveedor">
-                                    {ultimosPrecios[item.material_id].nombre_proveedor}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="td-muted">Sin historial</span>
-                              )}
-                            </td>
-                            <td>
-                              <button type="button" className="btn btn-danger btn-sm rs-trash-button"
-                                onClick={() => eliminarItem(idx)} aria-label="Eliminar ítem">
-                                <Trash2 size={13} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="rs-notas">Notas adicionales</label>
-                  <textarea id="rs-notas" className="form-textarea" value={form.notas}
-                    onChange={e => set('notas', e.target.value)} rows={2}
-                    placeholder="Observaciones generales de la requisición" />
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={cargando}>
-                  {cargando ? <><Loader2 size={14} className="spinner" /> Guardando...</> : 'Crear requisición'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal detalle / aprobar ────────────────────────── */}
-      {showDetalle && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowDetalle(false)}>
-          <div className="modal rs-modal-wide">
-            <div className="modal-header">
-              <span className="modal-title">
-                {modoAprobar ? `Aprobar — ${rsDetalle?.rs_id}` : `Detalle — ${rsDetalle?.rs_id}`}
-              </span>
-              <button className="btn btn-ghost btn-sm rs-icon-close" onClick={() => setShowDetalle(false)}
-                aria-label="Cerrar"><X size={16} /></button>
-            </div>
-
-            <div className="modal-body">
-              {cargandoDet ? (
-                <div className="page-loading"><Loader2 size={18} className="spinner" /><span>Cargando...</span></div>
-              ) : rsDetalle && (
-                <>
-                  <div className="system-values-box rs-system-box-gap">
-                    <div className="form-grid-3">
-                      {[
-                        { id: 'rs-dp', label: 'Proyecto',    value: rsDetalle.nombre_proyecto },
-                        { id: 'rs-de', label: 'Edificación', value: rsDetalle.nombre_edificio },
-                        { id: 'rs-dc', label: 'Capítulo',    value: rsDetalle.nombre_capitulo },
-                        { id: 'rs-ds', label: 'Solicitante', value: rsDetalle.solicitante },
-                        { id: 'rs-dpr',label: 'Prioridad',   value: rsDetalle.prioridad },
-                        { id: 'rs-dst',label: 'Estado',      value: rsDetalle.estado },
-                      ].map(f => (
-                        <div className="form-group" key={f.id}>
-                          <label className="form-label" htmlFor={f.id}>{f.label}</label>
-                          <input id={f.id} className="form-input" value={f.value} disabled />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="data-table-wrapper rs-table-gap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Material</th><th>Unidad</th>
-                          <th>Cant. solicitada</th><th>Cant. aprobada</th><th>Notas</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detalleItems.map(d => (
-                          <tr key={d.det_id}>
-                            <td className="td-bold">{d.nombre_material}</td>
-                            <td className="rs-td-unidad">
-                              <span className="badge badge-neutral">{d.unidad}</span>
-                            </td>
-                            <td className="rs-det-cantidad-right">
-                              {d.cantidad_solicitada.toLocaleString('es-CO')}
-                            </td>
-                            <td>
-                              {modoAprobar ? (
-                                <NumericInput
-                                  value={cantAprobadas[d.det_id] ?? d.cantidad_solicitada}
-                                  onChange={val => setCantAprobadas(s => ({ ...s, [d.det_id]: val }))}
-                                  decimals={2} max={d.cantidad_solicitada}
-                                />
-                              ) : (
-                                <span className={d.cantidad_aprobada != null ? 'rs-det-cantidad-aprobada' : 'rs-det-cantidad-pendiente'}>
-                                  {d.cantidad_aprobada != null ? d.cantidad_aprobada.toLocaleString('es-CO') : '—'}
-                                </span>
-                              )}
-                            </td>
-                            <td className="td-secondary">{d.notas || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {modoAprobar && (
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="rs-notas-apr">Notas de aprobación</label>
-                      <textarea id="rs-notas-apr" className="form-textarea" value={notasAprobar}
-                        onChange={e => setNotasAprobar(e.target.value)} rows={2}
-                        placeholder="Observaciones al aprobar" />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              {modoAprobar && rsDetalle?.estado === 'BORRADOR' ? (
-                <>
-                  <button className="btn btn-danger btn-sm"
-                    onClick={() => cambiarEstado(rsDetalle.rs_id, 'rechazar')}>
-                    <XCircle size={14} /> Rechazar
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => setShowDetalle(false)}>Cancelar</button>
-                  <button className="btn btn-primary" onClick={aprobar} disabled={cargando}>
-                    {cargando ? <><Loader2 size={14} className="spinner" /> Aprobando...</> : <><Check size={14} /> Aprobar RS</>}
-                  </button>
-                </>
-              ) : (
-                <>
-                  {puedeAprobar && rsDetalle && ['BORRADOR','APROBADA','EN_PROCESO'].includes(rsDetalle.estado) && (
-                    <button className="btn btn-danger btn-sm"
-                      onClick={() => cambiarEstado(rsDetalle.rs_id, 'anular')}>
-                      <XCircle size={14} /> Anular
-                    </button>
-                  )}
-                  <button className="btn btn-secondary" onClick={() => setShowDetalle(false)}>Cerrar</button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={!!confirmAccion}
+        titulo={confirmAccion?.accion === 'rechazar' ? 'Rechazar requisición' : 'Anular requisición'}
+        mensaje={confirmAccion?.accion === 'rechazar' ? '¿Rechazar esta requisición?' : '¿Anular esta requisición?'}
+        confirmLabel={confirmAccion?.accion === 'rechazar' ? 'Rechazar' : 'Anular'}
+        peligro
+        cargando={procesando}
+        onConfirm={confirmarAccion}
+        onCancel={() => setConfirmAccion(null)}
+      />
     </MainLayout>
   )
 }
